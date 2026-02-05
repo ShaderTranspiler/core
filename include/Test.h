@@ -11,6 +11,7 @@ namespace stc {
 class Test {
 public:
     LIB_EXPORT static void sayHi();
+    LIB_EXPORT static int retOne();
 };
 
 } // namespace stc

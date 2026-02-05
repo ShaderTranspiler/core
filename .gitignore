@@ -1,1 +1,5 @@
-build/
+# for CMake build directories
+build*/
+
+# cache for CMake FetchContent builds (e.g. Catch2)
+cmake_deps*/

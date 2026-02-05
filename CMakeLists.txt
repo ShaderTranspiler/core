@@ -1,5 +1,6 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.14)
 project(ShaderTranspilerCore)
+option(NO_CATCH "Skip downloading and building Catch2 and the unit tests (testing won't be available)" OFF)
 
 # make sure julia executable is available
 find_program(JULIA_EXEC julia)
@@ -46,7 +47,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(LIB_OUTPUT_DIR ${CMAKE_BINARY_DIR}/lib)
 
-file(GLOB_RECURSE CPP_SOURCE CONFIGURE_DEPENDS "src/*.cpp" "include/*.h" "sandbox/*.cpp" "sandbox/*.h")
+file(GLOB_RECURSE ALL_SOURCES CONFIGURE_DEPENDS "src/*.cpp" "include/*.h" "sandbox/*.cpp" "sandbox/*.h" "tests/*.cpp" "tests/*.h")
 
 # ccache
 
@@ -71,7 +72,7 @@ if (CLANG_FORMAT_EXEC)
                 -style=file
                 -n
                 --Werror
-                ${CPP_SOURCE}
+                ${ALL_SOURCES}
         COMMENT "Checking C++ code style..."
     )
 
@@ -81,7 +82,7 @@ if (CLANG_FORMAT_EXEC)
         COMMAND ${CLANG_FORMAT_EXEC}
                 -style=file
                 -i
-                ${CPP_SOURCE}
+                ${ALL_SOURCES}
         COMMENT "Fixing C++ code style..."
     )
 
@@ -126,15 +127,19 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 
         target_link_options(CommonConfig INTERFACE "/INCREMENTAL:NO")
     elseif(UNIX)
-        target_compile_options(CommonConfig INTERFACE -fsanitize=address,undefined)
+        target_compile_options(CommonConfig INTERFACE
+            -fsanitize=address,undefined -fno-omit-frame-pointer
+        )
+
         target_link_options(CommonConfig INTERFACE -fsanitize=address,undefined)
     endif()
 endif()
 
-set(LIB_SOURCE ${CPP_SOURCE})
-list(FILTER LIB_SOURCE EXCLUDE REGEX "sandbox/.*")
+set(LIB_SOURCES ${ALL_SOURCES})
+list(FILTER LIB_SOURCES EXCLUDE REGEX "sandbox/.*")
+list(FILTER LIB_SOURCES EXCLUDE REGEX "tests/.*")
 
-add_library(ShaderTranspilerCore SHARED ${LIB_SOURCE})
+add_library(ShaderTranspilerCore SHARED ${LIB_SOURCES})
 target_link_libraries(ShaderTranspilerCore PRIVATE CommonConfig)
 
 target_include_directories(ShaderTranspilerCore PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -160,14 +165,118 @@ set_target_properties(ShaderTranspilerCore PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL     ${LIB_OUTPUT_DIR}
 )
 
+# Catch2
+
+if (NOT NO_CATCH)
+    message(STATUS "tests are enabled, Catch2 will be downloaded and built, tests target will be enabled")
+    message(STATUS "use -DNO_CATCH=ON to skip test-related builds")
+
+    set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/cmake_deps_${CMAKE_SYSTEM_NAME}")
+
+    include(FetchContent)
+    FetchContent_Declare(
+        Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG        v3.12.0
+    )
+
+    FetchContent_MakeAvailable(Catch2)
+
+    if (TARGET Catch2::Catch2WithMain)
+        add_executable(tests tests/run.cpp)
+        target_link_libraries(tests PRIVATE ShaderTranspilerCore Catch2::Catch2WithMain CommonConfig)
+        target_include_directories(tests PRIVATE include)
+
+        # copy lib for test runner
+        add_custom_command(TARGET tests POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:ShaderTranspilerCore>
+            $<TARGET_FILE_DIR:tests>
+        )
+
+        # CTest
+        include(CTest)
+        enable_testing()
+        add_test(NAME UnitTests COMMAND tests)
+
+        message(STATUS "catch2 found, tests target enabled for unit testing")
+    else()
+        message(WARNING "catch2 could not be located, unit testing won't be possible")
+    endif()
+else()
+    message(STATUS "Skipping Catch2 build and tests target (NO_CATCH=ON)")
+endif()
+
+# Doxygen (+ Graphviz)
+find_package(Doxygen COMPONENTS dot)
+if (Doxygen_FOUND)
+    set(DOXYGEN_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/docs")
+
+    set(DOXYGEN_GENERATE_HTML YES)
+
+    set(DOXYGEN_GENERATE_LATEX YES)
+    set(DOXYGEN_USE_PDFLATEX YES)
+    set(DOXYGEN_PDF_HYPERLINKS YES)
+
+    set(DOXYGEN_RECURSIVE YES)
+    
+    # Graphviz
+    set(DOXYGEN_HAVE_DOT YES)
+    set(DOXYGEN_DOT_IMAGE_FORMAT svg)
+    set(DOXYGEN_DOT_TRANSPARENT YES)
+    set(DOXYGEN_CALL_GRAPH YES)
+    set(DOXYGEN_CALLER_GRAPH YES)
+    set(DOXYGEN_DIRECTORY_GRAPH YES)
+
+    set(DOXYGEN_UML_LOOK YES)
+    set(DOXYGEN_TEMPLATE_RELATIONS YES)
+    set(DOXYGEN_INCLUDE_GRAPH YES)
+    set(DOXYGEN_INTERACTIVE_SVG YES)
+
+    set(DOXYGEN_EXTRACT_ALL YES)
+    set(DOXYGEN_EXTRACT_PRIVATE YES)
+    set(DOXYGEN_EXTRACT_STATIC YES)
+
+    doxygen_add_docs(
+        docs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        COMMENT "Generating HTML and LaTeX docs with doxygen..."
+    )
+
+    message(STATUS "doxygen and graphviz found, docs target enabled")
+
+    find_program(PDFLATEX_COMPILER pdflatex)
+
+    if (PDFLATEX_COMPILER)
+        if (WIN32)
+            set(MAKE_CMD "make.bat")
+        else()
+            set(MAKE_CMD "make")
+        endif()
+
+        add_custom_command(TARGET docs POST_BUILD
+            COMMAND ${MAKE_CMD}
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs/latex"
+            COMMENT "Compiling LaTeX docs to PDF..."
+            VERBATIM
+        )
+        message(STATUS "pdflatex found, automatic LaTeX -> PDF docs generation enabled for docs target")
+    else()
+        message(WARNING "pdflatex could not be located, PDF generation from LaTeX docs won't be possible.")
+    endif()
+else()
+    message(WARNING "doxygen or graphviz could not be located, docs generation won't be possible.")
+endif()
+
 # sandbox targets
 # for trying out and playing around with the library
 # cpp files prefixed with run_ are treated as separate targets
 # other cpp files can be used for includes and such
 
-file(GLOB SANDBOX_SOURCE "sandbox/run_*.cpp")
+file(GLOB SANDBOX_SOURCES "sandbox/run_*.cpp")
 
-foreach (SBOX_FILE ${SANDBOX_SOURCE})
+foreach (SBOX_FILE ${SANDBOX_SOURCES})
     get_filename_component(FNAME ${SBOX_FILE} NAME_WE)
 
     add_executable(${FNAME} ${SBOX_FILE})
@@ -177,11 +286,10 @@ foreach (SBOX_FILE ${SANDBOX_SOURCE})
     target_include_directories(${FNAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sandbox)
     target_include_directories(${FNAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-    # copy lib next to executable
+    # copy lib next to sandbox executable
     add_custom_command(TARGET ${FNAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:ShaderTranspilerCore>
         $<TARGET_FILE_DIR:${FNAME}>
     )
 endforeach()
-
