@@ -114,13 +114,14 @@ if (NOT NO_TIDY)
     if (CLANG_TIDY_EXEC)
         set(CLANG_TIDY_CMD "${CLANG_TIDY_EXEC}")
 
-        list(APPEND CLANG_TIDY_CMD "-extra-arg=-Wno-unknown-warning-option")
+        list(APPEND CLANG_TIDY_CMD "--extra-arg=-Wno-unknown-warning-option")
         list(APPEND CLANG_TIDY_CMD "--header-filter=^${CMAKE_SOURCE_DIR}/*.h")
 
         if (MSVC)
             list(APPEND CLANG_TIDY_CMD "--extra-arg-before=--driver-mode=cl")
-            list(APPEND CLANG_TIDY_CMD "-extra-arg=-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")
-            list(APPEND CLANG_TIDY_CMD "-extra-arg=-Wno-unused-command-line-argument")
+            list(APPEND CLANG_TIDY_CMD "--extra-arg=-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")
+            list(APPEND CLANG_TIDY_CMD "--extra-arg=-Wno-unused-command-line-argument")
+            list(APPEND CLANG_TIDY_CMD "--extra-arg=/EHsc")
         endif()
 
         message(STATUS "clang-tidy found and enabled. Using ${CLANG_TIDY_EXEC}")
