@@ -9,13 +9,16 @@ AccessModifierOffset: -4
 PointerAlignment: Left
 ReferenceAlignment: Left
 BinPackArguments: true
-BinPackParameters: BinPack
+BinPackParameters: true
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortBlocksOnASingleLine: Empty
-AllowShortEnumsOnASingleLine: false
-AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortEnumsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortCompoundRequirementOnASingleLine: true
 AlignAfterOpenBracket: true
 IndentCaseLabels: true
+IndentExternBlock: Indent
+IndentPPDirectives: BeforeHash
 AlignConsecutiveShortCaseStatements:
   Enabled: true
   AcrossEmptyLines: true
@@ -41,8 +44,7 @@ SpaceBeforeParensOptions:
   AfterFunctionDefinitionName: false
   AfterIfMacros: true
   AfterOverloadedOperator: false
-  AfterPlacementOperator: false
+  AfterPlacementOperator: true
   AfterRequiresInClause: true
   AfterRequiresInExpression: true
   BeforeNonEmptyParentheses: false
-AllowShortCompoundRequirementOnASingleLine: true

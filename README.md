@@ -1,22 +1,30 @@
 # Shader Transpiler Core
 
-*Shader Transpiler Core* (STC) is a transpiler that aims to translate code snippets coming from CPU-side imperative/general purpose languages to shader languages for GPGPU computing. The main purpose is to be able to provide an interface, through which the end user doesn't even have to be aware that their code is being transpiled and run on the GPU.
+*Shader Transpiler Core* (STC) is a transpiler that aims to translate code snippets coming from CPU-side imperative/general purpose languages to shader languages. The main purpose is to be able to provide an automatic interface through which the end user doesn't even have to be aware that their code is being transpiled and run on the GPU. This means that instead of adding a bunch of decorators/attributes to the source language and requiring the end user to think in terms of coding for the GPU, the code is mostly transpiled as it would behave in the source context. So the aim is to allow "trivial" GPU-side parallelization of arbitrary CPU-side user code, as long as it doesn't rely on CPU or source language features that would make this impossible.
 
-The initial aim is to support Julia to GLSL transpilation, for the optimization of interactive tessellation of parametric geometries in the [Juliagebra](https://github.com/Csabix/Juliagebra) project. Hopefully, in the future, other source and target languages will be supported as well (e.g. HLSL or SPIR-V support would be nice). The above use case demonstrates the previously mentioned "hidden transpilation to GPU" flow's usefulness: Juliagebra aims to target not just CS people, but also those who might not be too familiar with deeper programming or computer architecture concepts, such as the quirks of GPU programming. However, the parallelization of the tessellation of parametric curves and surfaces (which has to be performed in an interactive manner), provides too good an optimization opportunity to ignore. The problem is that their actual code that has to be evaluated/sampled comes from the end user. Using this transpiler, the same parametric functions that the user would normally write can be turned into OpenGL compute shaders, and their evaluation can be executed in parallel.
+The initial aim is to support Julia to GLSL transpilation, for the optimization of interactive tessellation of parametric geometries in the [Juliagebra](https://github.com/Csabix/Juliagebra) project. Hopefully, in the future, other source and target languages will be supported as well (e.g. HLSL or SPIR-V). The above use case demonstrates the previously mentioned "hidden transpilation to GPU" flow's usefulness: Juliagebra aims to target not just CS people, but also those who might not be too familiar with deeper programming or computer architecture concepts, such as the quirks of GPU programming. However, the parallelization of tessellating parametric curves and surfaces (which has to be performed in an interactive manner), would be a noticable speed up during the interactive updates of the library. The problem is that the actual code that has to be evaluated/sampled comes from the end user. Using this transpiler, the same parametric functions that the user would normally write (for the CPU) can be turned into OpenGL compute shaders, and their evaluation can be executed in parallel.
 
-The final Julia-side API for the transpiler will be developed later, as a separate Julia Pkg that will act as a wrapper for interacting with the "unsafe" C++ code. It should also include some CPU-side tools for shader development (better shared code inclusion in shaders, Julia-side testing opportunities, etc), but this requires the transpiler core to be finished first.
-
-**DISCLAIMER**: This project is part of my undergrad thesis for a degree in CS at Eötvös Loránd University and so most of the requirements have been set up to fit this specific use case. Nevertheless, the aim of having this separate repo for the transpiler core is to write this part of the project in a modular, later-extensible manner.
+A Julia-side API for the transpiler will also be implemented, as a separate Julia Pkg, that will act as a wrapper for interacting with the "unsafe" C++ code through `ccall`.
 
 # Current Progress
 
-This section gives a quick overview of where I currently am with the project. I'll try to keep this up to date during development.
+Here is a (very) rough overview of the development timeline and its current progress:
 
-Currently, I've set up most of the development environment (including later necessities, like testing and docs). Hopefully they won't have to be modified too deeply in the future.
+- [x] Project setup (CMake, testing, etc.)
+- [x] Implement base structures and features, like BumpArena, Shader IR (SIR) type system, SIR AST base, etc.
+- [ ] Shader IR (SIR) semantic verification pass
+- [ ] Julia IR and semantic resolution pass
+- [ ] GLSL code generation
+- [ ] Configuration API
+- [ ] SIR-level implicit casting support
+- [ ] Multi-file and multi-function support
+- [ ] Expand Julia -> GLSL pipeline
+- [ ] Julia Pkg API
+- [ ] Unit tests
+- [ ] CI/CD
+- [ ] Wiki?
 
-My next big objective is to build a very primitive outline of the entire transpilation pipeline. The result will be something like being able to transpile simple arithmetic expressions from Julia to GLSL. Ironically, the input and output will mostly be the same, but obviously the middle part is where most of the work will need to be done.
-
-The current aim is to build the transpiler in a GLSL-first manner. It's important that instead of trying to simply find the equivalent GLSL string for a piece of Julia code, the transpiler understands the semantics of GLSL. This will be a bit of a headache in the beginning, but in the long term, this will lead to catching errors and incompatibilities in a way the previous implementation simply can't. This, in turn, will lead to nicer error messages for debugging.
+Note that these aren't necessarily in a chronological order, and the points differ vastly in difficulty and time needed to implement them.
 
 # Build System
 
@@ -33,19 +41,23 @@ See [Compilation output](#compilation-output) for what this actually produces.
 
 ### Approach #1
 
-The recommended way to use Visual Studio for development is to simply not, whenever possible.
+The recommended way to use Visual Studio for development is to simply not, whenever possible. VS doesn't naturally support a lot of tools (e.g. clang-tidy, Catch2) that other environments can detect and use without extra setup.
 
 ### Approach #2
 
 If [Approach #1](#approach-1) is not applicable, the second best way to use Visual Studio is to open the root directory directly, rather than the CMake generated solution and project files. VS will still integrate with CMake, and will use it for configuring and building the project. The reasoning for this approach is that this allows the use of tools like clang-tidy, which Visual Studio (and MSVC in general) mostly ignores otherwise, when ran directly on the generated files.
 
-There are a couple of build configurations provided (see *CMakeSettings.json* for details). The main difference is the generator they use (Ninja or VS, where Ninja is **highly** recommended over VS), and whether Debug or Release building is used. All configs are x64-based, though x86 can be set up later, if needed. All configs also use MSVC, though, again, this can be extended in the future to include clang, gcc, etc. (however, with other compilers, any environment other than VS probably offers a better dev experience, see [Approach #1](#approach-1)).
+There are a couple of build configurations provided (see *CMakeSettings.json* for details). The main difference is the generator they use (Ninja or VS, where Ninja is **highly** recommended over VS), and whether Debug or Release config is used for building. All configs are x64-based, though x86 can be set up later, if needed. All configs also use MSVC, though, again, this can be extended in the future to include clang, gcc, etc. (however, with other compilers, any environment other than VS probably offers a better dev experience, see [Approach #1](#approach-1)).
 
 VS support is not perfect, but it should be a viable option for development. As I personally don't mainly use VS, I did not want to dedicate any more time to implementing every single build step two times (once for clang/gcc, and once for MSVC). One imperfection is that with Ninja as a generator, clang-tidy correctly respects the warnings as errors option during building, whereas with the VS generators, it does not. Another nuisance is that VS tends to miss and/or misrecognize the more dynamic parts of the build process (e.g. addition/removal of sandbox targets), this is usually solved by deleting the CMake cache and reconfiguring. If that doesn't fix the issue, restarting VS might help. If that still doesn't fix the issue, it might be time to reconsider [Approach #1](#approach-1).
 
 ## libjulia linking
 
 The CMake configuration uses the julia executable (from PATH) to locate the libjulia shared library, and its header files. It adds these as include and link dependencies to the produced library automatically. This should work regardless of development platform, although it has only been tested in Windows and Linux environments. Note that this means building the transpiler requires an installed julia executable. In the future there might be a Julia-independent option to build the transpiler itself, but as Julia is currently the only supported source language, there is no use for this right now.
+
+This unfortunately means that a lot of static/runtime analysis tools start reporting violations from libjulia and/or llvm. One suppression file is provided for LSan in `misc/lsan.supp`, and one for Valgrind in `misc/valgrind.supp`. Valgrind still detects a couple of "still reachable"s, but their frame info is so generic that I couldn't find a way to suppress them with a general pattern.
+
+The script `scripts/init_debug_env.sh` can be used to locate (or specify) the LSan and Valgrind suppression files and add them to the current environment for use. For this, the script must be run sourced.
 
 ## Compilation flags
 
@@ -62,6 +74,7 @@ On other compilers the following flags are enabled:
 - `-Wall -Wextra -Wpedantic -Wconversion`: for strict compiler warnings, like on MSVC
 - `-fsanitize=address`: address sanitization, like in MSVC (with fewer incompatibilities)
 - `-fno-omit-frame-pointer`: should lead to a more consistently nice looking output from address sanitization
+- `-fvisibility=hidden` (for non-Debug builds): strips external access from final library for non-exported symbols (forces gcc/clang to mimic MSVC behavior). this is only used for non-Debug builds, otherwise sandboxes couldn't test/use non-exported symbols.
 
 ## Compilation output
 
@@ -79,7 +92,7 @@ ccache is included in the build process to speed up compilation time through com
 
 ## [clang-format](https://clang.llvm.org/docs/ClangFormat.html) (optional)
 
-clang-format is used for consistent code style. The CMake config provides the check-format and fix-format targets for retrieving a list of code style violations and automatically fixing them, respectively. The rules set up in the `.clang-format` file are mostly out of personal preference, that is, what I find to be *"readable"* and *"nice-looking"* for C++ code.
+clang-format is used for consistent code style. The CMake config provides the check_format and fix_format targets for retrieving a list of code style violations and automatically fixing them, respectively. The rules set up in the `.clang-format` file are mostly out of personal preference, that is, what I find to be *"readable"* and *"nice-looking"* for C++ code.
 
 A sample pre-commit hook script is also included in the `scripts/` directory, which verifies that the code contains no style violations. The script performs the validation on the current state of the directory, so any changes that are present, but are not staged for the current commit should be stashed for the duration before committing.
 
@@ -96,7 +109,7 @@ clang-tidy is used for static analysis. A strict set of rules is defined in the 
 
 Catch2 is used for unit tests. It is acquired through FetchContent and built when building the library itself. Unit tests can be run through the `tests` target.
 
-To maintain a no-test development version of the library specify the `-DNO_CATCH=ON` argument when creating the build directory through CMake. This will exclude Catch2 (and its slow build time), just as if it couldn't be located at all.
+By default, Catch2 and testing targets are not included in builds. To use them, add the `-DBUILD_TESTING=ON` switch when configuring through CMake.
 
 ## [Doxygen](https://doxygen.nl) (with [Graphviz](https://graphviz.org)) (optional)
 
@@ -106,7 +119,7 @@ The documentation parameters are, and will always be, subject to change as the p
 
 ## Dependency build caching
 
-Dependencies acquired from FetchContent are cached in `cmake_deps_<PLATFORM>` directories when they are first built. This ensures that later (re)builds don't need to perform an entire build of external dependencies every time. The reason for separate directories based on the development platform is to be able to create and maintain a build directory for both, for example, Windows and WSL during development. See the example below.
+Dependencies acquired from FetchContent are cached in `_deps_<PLATFORM>` directories when they are first built. This ensures that later (re)builds don't need to perform an entire build of external dependencies every time. The reason for separate directories based on the development platform is to be able to create and maintain a build directory for both, for example, Windows and WSL during development. See the example below.
 
 Currently, this only affects Catch2 building.
 

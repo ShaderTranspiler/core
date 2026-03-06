@@ -1,8 +1,15 @@
 cmake_minimum_required(VERSION 3.24)
 project(ShaderTranspilerCore)
 option(FETCH_CATCH2 "Force fetching Catch2 from the github repo, even if it's installed locally" OFF)
-option(TIDY_SANDBOX "Enable clang-tidy analysis in sandbox files" OFF)
 option(NO_CCACHE "Disable compiler caching through ccache, even if it's installed locally" OFF)
+option(NO_TIDY "Disable static analysis through clang-tidy, even if it's installed locally" OFF)
+
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
+    message(STATUS "No build type specified, defaulting to Debug")
+    set(CMAKE_BUILD_TYPE "Debug")
+endif()
+
+message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
 # make sure julia executable is available
 find_program(JULIA_EXEC julia)
@@ -75,7 +82,7 @@ find_program(CLANG_FORMAT_EXEC NAMES clang-format)
 if (CLANG_FORMAT_EXEC)
     # style checking
     add_custom_target(
-        check-format
+        "check_format"
         COMMAND ${CLANG_FORMAT_EXEC}
                 -style=file
                 -n
@@ -86,7 +93,7 @@ if (CLANG_FORMAT_EXEC)
 
     # automatic style enforcement
     add_custom_target(
-        fix-format
+        "fix_format"
         COMMAND ${CLANG_FORMAT_EXEC}
                 -style=file
                 -i
@@ -94,29 +101,34 @@ if (CLANG_FORMAT_EXEC)
         COMMENT "Fixing C++ code style..."
     )
 
-    message(STATUS "clang-format found, check-format and fix-format targets enabled")
+    message(STATUS "clang-format found, check_format and fix_format targets enabled. Using ${CLANG_FORMAT_EXEC}")
 else()
     message(WARNING "clang-format could not be located, code style checking won't be possible.")
 endif()
 
 # clang-tidy
 
-find_program(CLANG_TIDY_EXEC clang-tidy)
-if (CLANG_TIDY_EXEC)
-    set(CLANG_TIDY_CMD "${CLANG_TIDY_EXEC}")
+if (NOT NO_TIDY)
+    find_program(CLANG_TIDY_EXEC clang-tidy)
 
-    list(APPEND CLANG_TIDY_CMD "-extra-arg=-Wno-unknown-warning-option")
-    list(APPEND CLANG_TIDY_CMD "--header-filter=^${CMAKE_SOURCE_DIR}/*.h")
+    if (CLANG_TIDY_EXEC)
+        set(CLANG_TIDY_CMD "${CLANG_TIDY_EXEC}")
 
-    if (MSVC)
-        list(APPEND CLANG_TIDY_CMD "--extra-arg-before=--driver-mode=cl")
-        list(APPEND CLANG_TIDY_CMD "-extra-arg=-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")
-        list(APPEND CLANG_TIDY_CMD "-extra-arg=-Wno-unused-command-line-argument")
+        list(APPEND CLANG_TIDY_CMD "-extra-arg=-Wno-unknown-warning-option")
+        list(APPEND CLANG_TIDY_CMD "--header-filter=^${CMAKE_SOURCE_DIR}/*.h")
+
+        if (MSVC)
+            list(APPEND CLANG_TIDY_CMD "--extra-arg-before=--driver-mode=cl")
+            list(APPEND CLANG_TIDY_CMD "-extra-arg=-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH")
+            list(APPEND CLANG_TIDY_CMD "-extra-arg=-Wno-unused-command-line-argument")
+        endif()
+
+        message(STATUS "clang-tidy found and enabled. Using ${CLANG_TIDY_EXEC}")
+    else()
+        message(WARNING "clang-tidy could not be located, static analysis won't be possible.")
     endif()
-
-    message(STATUS "clang-tidy found and enabled")
 else()
-    message(WARNING "clang-tidy could not be located, static analysis won't be possible.")
+    message(STATUS "clang-tidy disabled explicitly")
 endif()
 
 add_library(CommonConfig INTERFACE)
@@ -127,6 +139,7 @@ if (MSVC)
 else()
     target_compile_options(CommonConfig INTERFACE
         -Wall -Wextra -Wpedantic -Wconversion
+        $<$<NOT:$<CONFIG:Debug>>:-fvisibility=hidden>
     )
 endif()
 
@@ -148,12 +161,12 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_options(CommonConfig INTERFACE
             -fsanitize=address,undefined -fno-omit-frame-pointer -g
         )
-        
+
         target_link_options(CommonConfig INTERFACE -fsanitize=address,undefined)
         message(STATUS "ASan enabled for GCC/Clang/etc (detected ${CMAKE_SYSTEM_NAME})")
+    else()
+        message(STATUS "ASan not supported on the host system (${CMAKE_SYSTEM_NAME})")
     endif()
-else()
-    message(STATUS "ASan not supported on the host system (${CMAKE_SYSTEM_NAME})")
 endif()
 
 set(LIB_SOURCES ${ALL_SOURCES})
@@ -162,18 +175,18 @@ list(FILTER LIB_SOURCES EXCLUDE REGEX "test/.*")
 
 file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS "include/*.h")
 
-set(LIB_TARGET STC)
+set(LIB_TARGET stc_lib)
 
 add_library(${LIB_TARGET} SHARED ${LIB_SOURCES})
 
 target_include_directories(${LIB_TARGET} PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(${LIB_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_include_directories(${LIB_TARGET} PRIVATE ${JULIA_INCLUDE_DIR})
+target_include_directories(${LIB_TARGET} SYSTEM PRIVATE ${JULIA_INCLUDE_DIR})
 
 target_link_libraries(${LIB_TARGET} PRIVATE CommonConfig)
 target_link_libraries(${LIB_TARGET} PRIVATE ${JULIA_LIB})
 
-target_compile_definitions(${LIB_TARGET} PRIVATE JULIA_ENABLE_THREADING=1)
+target_compile_definitions(${LIB_TARGET} PRIVATE STC_BUILDING_DLL JULIA_ENABLE_THREADING=1)
 
 target_sources(${LIB_TARGET} PUBLIC
     FILE_SET HEADERS
@@ -198,7 +211,7 @@ set_target_properties(${LIB_TARGET} PROPERTIES
     VERIFY_INTERFACE_HEADER_SETS            ON
 )
 
-if (DEFINED CLANG_TIDY_CMD)
+if (DEFINED CLANG_TIDY_CMD AND NOT NO_TIDY)
     set_target_properties(${LIB_TARGET} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_CMD}")
 endif()
 
@@ -236,7 +249,7 @@ if (BUILD_TESTING)
     add_executable(unit_tests "test/test.cpp")
     target_link_libraries(unit_tests PRIVATE ${LIB_TARGET} Catch2::Catch2WithMain CommonConfig)
     target_include_directories(unit_tests PRIVATE include)
-    target_include_directories(unit_tests PRIVATE ${JULIA_INCLUDE_DIR})
+    target_include_directories(unit_tests SYSTEM PRIVATE ${JULIA_INCLUDE_DIR})
 
     # copy lib for test runner
     add_custom_command(TARGET unit_tests POST_BUILD
@@ -333,9 +346,11 @@ foreach (SBOX_FILE ${SANDBOX_SOURCES})
 
     target_include_directories(${FNAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/sandbox)
     target_include_directories(${FNAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_include_directories(${FNAME} PRIVATE ${JULIA_INCLUDE_DIR})
+    target_include_directories(${FNAME} SYSTEM PRIVATE ${JULIA_INCLUDE_DIR})
 
-    set_target_properties(${FNAME} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_CMD}")
+    if (DEFINED CLANG_TIDY_CMD AND NOT NO_TIDY)
+        set_target_properties(${FNAME} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_CMD}")
+    endif()
 
     # copy lib next to sandbox executable
     add_custom_command(TARGET ${FNAME} POST_BUILD

@@ -19,7 +19,8 @@ TypeId TypePool::insert(TDVariantType&& type) {
     if (purge_duplicates) {
         TypeId id = 0;
         for (auto&& td : pool) {
-            if (td.type_data == type) return id;
+            if (td.type_data == type)
+                return id;
 
             id++;
         }
@@ -93,7 +94,8 @@ TypeId TypePool::make_struct_t(std::string name, std::vector<StructTD::FieldInfo
         throw std::logic_error{"Cannot create struct type with duplicate field names"};
 
     // TODO: proper identifier format enforcement
-    if (name.empty()) throw std::logic_error{"Cannot create struct type with an empty type name"};
+    if (name.empty())
+        throw std::logic_error{"Cannot create struct type with an empty type name"};
     for (const auto& fi : fields) {
         if (fi.name.empty())
             throw std::logic_error{"Cannot create struct type with an empty field name"};

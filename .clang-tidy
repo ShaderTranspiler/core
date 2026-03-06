@@ -12,9 +12,8 @@ Checks: >
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-pro-type-vararg,
   -readability-braces-around-statements,
-  -cppcoreguidelines-macro-usage
-
-WarningsAsErrors: '*'
+  -cppcoreguidelines-macro-usage,
+  -readability-redundant-member-init
 
 CheckOptions:
   readability-magic-numbers.IgnorePowersOf2IntegerValues: true

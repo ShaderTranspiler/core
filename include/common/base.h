@@ -1,7 +1,15 @@
 #pragma once
 
-#ifdef _WIN32
-#define LIB_EXPORT __declspec(dllexport)
+#if defined(_WIN32) || defined(__CYGWIN__)
+    #ifdef STC_BUILDING_DLL
+        #define STC_API __declspec(dllexport)
+    #else
+        #define STC_API __declspec(dllimport)
+    #endif
 #else
-#define LIB_EXPORT
+    #if __GNUC__ >= 4
+        #define STC_API __attribute__((visibility("default")))
+    #else
+        #define STC_API
+    #endif
 #endif

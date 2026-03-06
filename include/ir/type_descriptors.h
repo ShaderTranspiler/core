@@ -65,12 +65,7 @@ struct IntTD {
 };
 
 struct FloatTD {
-    enum class Encoding : uint8_t {
-        ieee754,
-        bfloat16,
-        f8e4m3,
-        f8e5m2
-    };
+    enum class Encoding : uint8_t { ieee754, bfloat16, f8e4m3, f8e5m2 };
 
     constexpr static std::optional<uint32_t> required_width(Encoding enc) {
         switch (enc) {

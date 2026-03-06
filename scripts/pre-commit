@@ -23,14 +23,14 @@ if [ ! -d "$builddir" ]; then
 fi
 
 echo "-- Running clang-format check --"
-cmake --build "$builddir" --target check-format > /dev/null 2>&1
+cmake --build "$builddir" --target check_format > /dev/null 2>&1
 
 if [ $? -ne 0 ]; then
 	echo ""
 	echo "COMMIT ABORTED: Code style violation(s) found during clang-format check."
 	echo ""
-	echo "You can auto-fix these violations using: cmake --build $builddir --target=fix-format"
-	echo "Or, you can check them manually using: cmake --build $builddir --target=check-format"
+	echo "You can auto-fix these violations using: cmake --build $builddir --target=fix_format"
+	echo "Or, you can check them manually using: cmake --build $builddir --target=check_format"
 	echo ""
 	echo "Note that these could be violations coming from files not staged for committing."
 	echo "If this is the case, temporarily remove non-staged changes (e.g. 'git stash --keep-index') and try again."

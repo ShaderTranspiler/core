@@ -1,0 +1,14 @@
+{
+    ignore_julia_lib
+    Memcheck:Leak
+    ...
+    obj:*/lib/julia/*.so.*
+    ...
+}
+{
+    ignore_julia_fns
+    Memcheck:Leak
+    ...
+    fun:*jl_*
+    ...
+}
