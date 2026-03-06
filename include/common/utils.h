@@ -73,7 +73,7 @@ std::unique_ptr<To> static_unique_cast(std::unique_ptr<From>&& ptr) {
 // same as boost's current hash_combine implementation for 64-bit size_t:
 // https://www.boost.org/doc/libs/latest/libs/container_hash/doc/html/hash.html#notes_hash_combine
 template <typename T>
-requires Hashable<T>
+// requires Hashable<T>
 inline size_t hash_combine(size_t seed, const T& v) {
     size_t x = seed + 0x9e3779b9 + std::hash<T>{}(v);
     x ^= x >> 32;
@@ -83,5 +83,29 @@ inline size_t hash_combine(size_t seed, const T& v) {
     x ^= x >> 28;
     return x;
 }
+
+// named after Boost's strong typedefs (pattern has been slightly tweaked/extended)
+template <std::unsigned_integral IdTy>
+struct StrongId {
+    using id_type = IdTy;
+
+    IdTy value;
+
+    constexpr StrongId() = default;
+
+    constexpr StrongId(IdTy id)
+        : value{id} {}
+
+    // to enable truncated static_cast-s without warnings
+    template <std::unsigned_integral T>
+    requires (!std::same_as<T, IdTy>)
+    constexpr explicit StrongId(T value)
+        : value{static_cast<IdTy>(value)} {}
+
+    constexpr operator IdTy() const { return value; }
+
+    constexpr bool operator==(const StrongId&) const  = default;
+    constexpr auto operator<=>(const StrongId&) const = default;
+};
 
 } // namespace stc

@@ -56,8 +56,8 @@ namespace stc::ir {
 // CLEANUP: move these into an AST visitor
 
 /*
-void Block::dump(size_t level, std::ostream& out) const {
-out << indent(level) << "Block\n";
+void CompoundStmt::dump(size_t level, std::ostream& out) const {
+out << indent(level) << "CompoundStmt\n";
 
 for (const StmtPtr& stmt : body)
     stmt->dump(level + 1, out);

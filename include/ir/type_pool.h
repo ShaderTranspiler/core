@@ -11,21 +11,24 @@ namespace stc::ir {
 
 class TypePool final {
 private:
-    using ArenaT = BumpArena<TypeId>;
+    using ArenaTy = BumpArena<TypeId::id_type>;
 
 public:
     // ! expects arena to not be empty and not used by others (it can only be inspected)
-    explicit TypePool(ArenaT& arena)
+    explicit TypePool(ArenaTy& arena)
         : arena{arena} {
-        // if these macros ever change, don't forget to modify the default inserts
-        static_assert(TypeIds::Void == 0 && TypeIds::Bool == 1);
-        std::ignore = arena.emplace<VoidTD>();
-        std::ignore = arena.emplace<BoolTD>();
+
+        // NOTE: if these macros ever change, don't forget to modify this
+        static_assert(TypeId::void_id() == TypeId{1U} && TypeId::bool_id() == TypeId{2U});
+
+        // make sure arena IDs 1 and 2 will not be given out
+        std::ignore = arena.allocate(2, 1);
+        assert(arena.get_current_offset() == 3);
     }
 
     const TypeDescriptor& get_td(TypeId id) const;
 
-    template <TypeDescriptorT T>
+    template <TypeDescriptorTy T>
     bool is_type_of(TypeId id) const {
         auto* td = static_cast<TypeDescriptor*>(arena.get_ptr(id));
         assert(td != nullptr);
@@ -35,8 +38,8 @@ public:
 
     inline TypeId size() const { return static_cast<TypeId>(pool.size()); }
 
-    [[nodiscard]] static TypeId void_td() { return TypeIds::Void; }
-    [[nodiscard]] static TypeId bool_td() { return TypeIds::Bool; }
+    [[nodiscard]] static TypeId void_td() { return TypeId::void_id(); }
+    [[nodiscard]] static TypeId bool_td() { return TypeId::bool_id(); }
     [[nodiscard]] TypeId int_td(uint32_t width, bool signedness);
     [[nodiscard]] TypeId float_td(uint32_t width, FloatTD::Encoding encoding);
     [[nodiscard]] TypeId vector_td(TypeId component_type_id, uint32_t component_count);
@@ -49,7 +52,7 @@ public:
 private:
     [[nodiscard]] TypeId insert(TDVariantType type, bool purge_duplicates = true);
 
-    ArenaT& arena;
+    ArenaTy& arena;
     std::unordered_map<TDVariantType, TypeId> pool;
     std::unordered_map<std::string_view, TypeId> struct_map;
 };

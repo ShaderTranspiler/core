@@ -31,7 +31,15 @@
 
 namespace stc::ir {
 
-using NodeId = uint32_t;
+// CLEANUP: trailing objects pattern where applicable
+
+struct StmtId : public StrongId<uint32_t> {
+    using StrongId::StrongId;
+};
+
+struct DeclId : public StrongId<uint16_t> {
+    using StrongId::StrongId;
+};
 
 struct Decl {
     SrcLocationId location;
@@ -48,7 +56,6 @@ struct Decl {
 
     DUMP_DECL_PURE
 };
-using DeclPtr = std::unique_ptr<Decl>;
 
 struct Stmt {
     enum class NodeKind : uint8_t {
@@ -62,10 +69,12 @@ struct Stmt {
         StructInstLit,
         BinOp,
         ExplCast,
-        LastExpr = ExplCast,
+        DeclRef,
+        LastExpr = DeclRef,
 
         FirstStmt,
-        If = FirstStmt,
+        Compound = FirstStmt,
+        If,
         Return,
         LastStmt = Return,
     };
@@ -142,16 +151,16 @@ struct Expr : public Stmt {
     }
 };
 
-struct Block {
-    SrcLocationId location;
-    std::vector<NodeId> body;
+struct CompoundStmt : public Stmt {
+    std::vector<StmtId> body;
 
-    explicit Block(SrcLocationId location, std::vector<NodeId> body)
-        : location{location}, body{std::move(body)} {}
+    explicit CompoundStmt(SrcLocationId location, std::vector<StmtId> body)
+        : Stmt{location, NodeKind::Compound}, body{std::move(body)} {}
 
+    SAME_NODE_T_DEF(NodeKind::Compound)
     DUMP_DECL_NO_OV
 };
-using BlockPtr = std::unique_ptr<Block>;
+using BlockPtr = std::unique_ptr<CompoundStmt>;
 
 // ================
 //   Declarations
@@ -159,10 +168,10 @@ using BlockPtr = std::unique_ptr<Block>;
 
 struct VarDecl : public Decl {
     TypeId type;
-    std::optional<NodeId> initializer;
+    std::optional<StmtId> initializer;
 
     explicit VarDecl(SrcLocationId location, std::string identifier, TypeId type,
-                     std::optional<NodeId> initializer = std::nullopt)
+                     std::optional<StmtId> initializer = std::nullopt)
         : Decl{location, std::move(identifier)}, type{type}, initializer{initializer} {}
 
     DUMP_DECL
@@ -174,7 +183,7 @@ struct VarDecl : public Decl {
 
 struct BoolLiteral : public Expr {
     explicit BoolLiteral(SrcLocationId location, bool value)
-        : Expr{location, NodeKind::BoolLit, TypeIds::Bool, static_cast<uint8_t>(value)} {}
+        : Expr{location, NodeKind::BoolLit, TypeId::bool_id(), static_cast<uint8_t>(value)} {}
 
     bool value() const { return static_cast<bool>(node_storage); }
 
@@ -203,9 +212,9 @@ struct FloatLiteral : public Expr {
 };
 
 struct VectorLiteral : public Expr {
-    std::vector<NodeId> components;
+    std::vector<StmtId> components;
 
-    explicit VectorLiteral(SrcLocationId location, TypeId vec_type, std::vector<NodeId> components)
+    explicit VectorLiteral(SrcLocationId location, TypeId vec_type, std::vector<StmtId> components)
         : Expr{location, NodeKind::VecLit, vec_type}, components{std::move(components)} {}
 
     SAME_NODE_T_DEF(NodeKind::VecLit)
@@ -214,10 +223,10 @@ struct VectorLiteral : public Expr {
 
 // column-major storage
 struct MatrixLiteral : public Expr {
-    std::vector<std::vector<NodeId>> data; // CLEANUP: flatten to 1D
+    std::vector<std::vector<StmtId>> data; // CLEANUP: flatten to 1D
 
     explicit MatrixLiteral(SrcLocationId location, TypeId mat_type,
-                           std::vector<std::vector<NodeId>> data)
+                           std::vector<std::vector<StmtId>> data)
         : Expr{location, NodeKind::MatLit, mat_type}, data{std::move(data)} {}
 
     SAME_NODE_T_DEF(NodeKind::MatLit)
@@ -225,9 +234,9 @@ struct MatrixLiteral : public Expr {
 };
 
 struct ArrayLiteral : public Expr {
-    std::vector<NodeId> elements;
+    std::vector<StmtId> elements;
 
-    explicit ArrayLiteral(SrcLocationId location, TypeId arr_type, std::vector<NodeId> elements)
+    explicit ArrayLiteral(SrcLocationId location, TypeId arr_type, std::vector<StmtId> elements)
         : Expr{location, NodeKind::ArrLit, arr_type}, elements{std::move(elements)} {}
 
     SAME_NODE_T_DEF(NodeKind::ArrLit)
@@ -235,10 +244,10 @@ struct ArrayLiteral : public Expr {
 };
 
 struct StructInstantiationLiteral : public Expr {
-    std::vector<std::pair<std::string, NodeId>> field_values;
+    std::vector<std::pair<std::string, StmtId>> field_values;
 
     explicit StructInstantiationLiteral(SrcLocationId location, TypeId struct_type,
-                                        std::vector<std::pair<std::string, NodeId>> field_values)
+                                        std::vector<std::pair<std::string, StmtId>> field_values)
         : Expr{location, NodeKind::StructInstLit, struct_type},
           field_values{std::move(field_values)} {}
 
@@ -249,11 +258,10 @@ struct StructInstantiationLiteral : public Expr {
 struct BinaryOp : public Expr {
     enum class OpKind : uint8_t { add, sub, mul, div, pow, mod };
 
-    NodeId lhs;
-    NodeId rhs;
+    StmtId lhs, rhs;
 
     // CLEANUP: remove need for explicit type
-    explicit BinaryOp(SrcLocationId location, TypeId type, OpKind op, NodeId lhs, NodeId rhs)
+    explicit BinaryOp(SrcLocationId location, TypeId type, OpKind op, StmtId lhs, StmtId rhs)
         : Expr{location, NodeKind::BinOp, type, static_cast<uint8_t>(op)}, lhs{lhs}, rhs{rhs} {}
 
     OpKind op() const { return static_cast<OpKind>(node_storage); }
@@ -263,12 +271,23 @@ struct BinaryOp : public Expr {
 };
 
 struct ExplicitCast : public Expr {
-    NodeId base;
+    StmtId base;
 
-    explicit ExplicitCast(SrcLocationId location, NodeId base, TypeId target_type)
+    explicit ExplicitCast(SrcLocationId location, StmtId base, TypeId target_type)
         : Expr{location, NodeKind::ExplCast, target_type}, base{base} {}
 
     SAME_NODE_T_DEF(NodeKind::ExplCast)
+    DUMP_DECL
+};
+
+struct DeclRefExpr : public Expr {
+    DeclId decl;
+
+    // TODO: remove need for explicit type
+    explicit DeclRefExpr(SrcLocationId location, DeclId decl, TypeId decl_type)
+        : Expr{location, NodeKind::DeclRef, decl_type}, decl{decl} {}
+
+    SAME_NODE_T_DEF(NodeKind::DeclRef)
     DUMP_DECL
 };
 
@@ -277,12 +296,12 @@ struct ExplicitCast : public Expr {
 // ===============
 
 struct IfStmt : public Stmt {
-    NodeId condition_expr;
-    NodeId true_block;
-    NodeId false_block;
+    StmtId condition_expr;
+    StmtId true_block;
+    StmtId false_block;
 
-    explicit IfStmt(SrcLocationId location, NodeId condition_expr, NodeId true_block,
-                    NodeId false_block)
+    explicit IfStmt(SrcLocationId location, StmtId condition_expr, StmtId true_block,
+                    StmtId false_block)
         : Stmt{location, NodeKind::If},
           condition_expr{condition_expr},
           true_block{true_block},
@@ -293,9 +312,9 @@ struct IfStmt : public Stmt {
 };
 
 struct ReturnStmt : public Stmt {
-    NodeId ret_value_expr;
+    StmtId ret_value_expr;
 
-    explicit ReturnStmt(SrcLocationId location, NodeId ret_value_expr)
+    explicit ReturnStmt(SrcLocationId location, StmtId ret_value_expr)
         : Stmt{location, NodeKind::Return}, ret_value_expr{ret_value_expr} {}
 
     SAME_NODE_T_DEF(NodeKind::Return)

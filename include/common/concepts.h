@@ -14,9 +14,6 @@ template <typename T>
 concept NotVoid = !std::is_void_v<T>;
 
 template <typename T>
-concept IsUnsigned = std::is_unsigned_v<T>;
-
-template <typename T>
 concept Hashable = requires (T a) {
     { std::hash<T>{}(a) } noexcept -> std::convertible_to<size_t>;
 };

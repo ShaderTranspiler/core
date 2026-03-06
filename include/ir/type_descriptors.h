@@ -22,15 +22,13 @@ namespace stc::ir {
 
 class TypePool;
 
-using TypeId = uint16_t;
+struct TypeId : public StrongId<uint16_t> {
+    using StrongId::StrongId;
 
-namespace TypeIds {
-
-inline constexpr TypeId Invalid = std::numeric_limits<TypeId>::max();
-inline constexpr TypeId Void    = 0U;
-inline constexpr TypeId Bool    = 1U;
-
-}; // namespace TypeIds
+    static constexpr TypeId null_id() { return 0U; }
+    static constexpr TypeId void_id() { return 1U; }
+    static constexpr TypeId bool_id() { return 2U; }
+};
 
 struct VoidTD {
     constexpr bool operator==(const VoidTD&) const = default;
@@ -118,7 +116,7 @@ using TDVariantType =
     std::variant<VoidTD, BoolTD, IntTD, FloatTD, VectorTD, MatrixTD, ArrayTD, StructTD>;
 
 template <typename T>
-concept TypeDescriptorT =
+concept TypeDescriptorTy =
     std::is_same_v<T, VoidTD> || std::is_same_v<T, BoolTD> || std::is_same_v<T, IntTD> ||
     std::is_same_v<T, FloatTD> || std::is_same_v<T, VectorTD> || std::is_same_v<T, MatrixTD> ||
     std::is_same_v<T, ArrayTD> || std::is_same_v<T, StructTD>;
@@ -131,7 +129,7 @@ struct TypeDescriptor {
     TypeDescriptor& operator=(const TypeDescriptor&) = delete;
     TypeDescriptor& operator=(TypeDescriptor&&)      = default;
 
-    template <TypeDescriptorT T>
+    template <TypeDescriptorTy T>
     constexpr bool is() const {
         return std::holds_alternative<T>(type_data);
     }
@@ -143,7 +141,7 @@ struct TypeDescriptor {
     constexpr bool is_array() const { return is<ArrayTD>(); }
     constexpr bool is_custom() const { return is<StructTD>(); }
 
-    template <TypeDescriptorT T>
+    template <TypeDescriptorTy T>
     constexpr const T& as() const {
         return std::get<T>(type_data);
     }
@@ -159,6 +157,13 @@ private:
 static_assert(sizeof(TypeDescriptor) == sizeof(TDVariantType));
 
 } // namespace stc::ir
+
+template <>
+struct std::hash<stc::ir::TypeId> {
+    size_t operator()(const stc::ir::TypeId& x) const noexcept {
+        return std::hash<stc::ir::TypeId::id_type>{}(x.value);
+    }
+};
 
 template <>
 struct std::hash<stc::ir::VoidTD> {

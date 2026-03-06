@@ -78,7 +78,7 @@ TypeId TypePool::get_struct_td(std::string_view name) {
     if (auto it = struct_map.find(name); it != struct_map.end())
         return it->second;
 
-    return TypeIds::Invalid;
+    return TypeId::null_id();
 }
 
 TypeId TypePool::make_struct_td(std::string name, std::vector<StructData::FieldInfo> fields) {

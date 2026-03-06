@@ -46,7 +46,9 @@ private:
 // used by SrcInfoManager, to emplace invalid state into arena
 static_assert(std::is_trivially_copy_constructible_v<SrcLocation>);
 
-using SrcLocationId = uint32_t;
+struct SrcLocationId : public StrongId<uint32_t> {
+    using StrongId::StrongId;
+};
 
 std::nullptr_t report(const SrcFile& file, SrcLocation location, std::string_view msg,
                       bool is_warning, std::ostream& out = std::cerr);
@@ -57,12 +59,12 @@ std::nullptr_t warning(const SrcFile& file, SrcLocation location, std::string_vi
 
 class SrcInfoManager {
 private:
-    using ArenaT      = BumpArena<SrcLocationId>;
-    using ArenaAllocT = BumpArenaAllocator<SrcLocationId, SrcLocation>;
+    using ArenaTy      = BumpArena<SrcLocationId::id_type>;
+    using ArenaAllocTy = BumpArenaAllocator<SrcLocationId::id_type, SrcLocation>;
 
 public:
     // ! expects arena to not be modified by others, only inspected
-    explicit SrcInfoManager(ArenaT& arena, size_t initial_file_capacity = 4);
+    explicit SrcInfoManager(ArenaTy& arena, size_t initial_file_capacity = 4);
 
     [[nodiscard]] SrcLocationId make_location(uint32_t line, uint32_t col);
     [[nodiscard]] uint64_t make_file(std::string path);
@@ -70,7 +72,7 @@ public:
     const SrcFile& get_file_for_location(SrcLocationId loc_id) const;
 
 private:
-    ArenaAllocT arena_alloc;
+    ArenaAllocTy arena_alloc;
 
     std::vector<std::pair<SrcLocationId, SrcFile>> file_bounds;
 

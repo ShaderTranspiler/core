@@ -24,7 +24,7 @@ std::nullptr_t warning(const SrcFile& file, SrcLocation location, std::string_vi
     return report(file, location, msg, true, out);
 }
 
-SrcInfoManager::SrcInfoManager(ArenaT& arena, size_t initial_file_capacity)
+SrcInfoManager::SrcInfoManager(ArenaTy& arena, size_t initial_file_capacity)
     : arena_alloc{&arena}, file_bounds{} {
     file_bounds.reserve(initial_file_capacity);
 
