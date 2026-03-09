@@ -1,13 +1,12 @@
-#include "backends/glsl/types.h"
+#include "backend/glsl/types.h"
 
-#include "backends/glsl/code_gen.h"
+#include "backend/glsl/code_gen.h"
 
 namespace {
 
-using namespace stc::ir;
-using BinOpKind = BinaryOp::OpKind;
+using BinOpKind = stc::sir::BinaryOp::OpKind;
 
-inline char bin_op_kind_str(BinaryOp::OpKind op) {
+inline char bin_op_kind_str(BinOpKind op) {
     switch (op) {
         case BinOpKind::add:
             return '+';

@@ -1,12 +1,12 @@
 #include <cassert>
 #include <format>
 
-#include "ir/type_descriptors.h"
-#include "ir/type_pool.h"
+#include "types/type_descriptors.h"
+#include "types/type_pool.h"
 
 namespace {
 
-using FPEnc = stc::ir::FloatTD::Encoding;
+using FPEnc = stc::types::FloatTD::Encoding;
 
 std::string to_string(FPEnc enc) {
     switch (enc) {
@@ -28,7 +28,7 @@ std::string to_string(FPEnc enc) {
 
 } // namespace
 
-namespace stc::ir {
+namespace stc::types {
 
 MatrixTD::MatrixInfo MatrixTD::get_info(TypeId mat_id, const TypePool& type_pool) {
     assert(type_pool.is_type_of<MatrixTD>(mat_id) && "mat_id points to non-matrix type");
@@ -115,4 +115,4 @@ std::string to_string(TypeId type_id, const TypePool& type_pool) {
     return to_string(type_pool.get_td(type_id), type_pool);
 }
 
-} // namespace stc::ir
+} // namespace stc::types

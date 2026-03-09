@@ -1,10 +1,10 @@
 #pragma once
 
 #include "common/bump_arena.h"
-#include "ir/ast.h"
-#include "ir/type_pool.h"
+#include "sir/ast.h"
+#include "types/type_pool.h"
 
-namespace stc::ir {
+namespace stc::sir {
 
 struct ASTCtx {
 private:
@@ -57,4 +57,4 @@ public:
     operator const SrcInfoManager&() const { return src_info_manager; }
 };
 
-}; // namespace stc::ir
+}; // namespace stc::sir

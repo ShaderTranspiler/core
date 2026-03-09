@@ -1,11 +1,11 @@
-#include <backends/glsl/code_gen.h>
+#include <backend/glsl/code_gen.h>
 #include <iostream>
-#include <ir/ast_dumper.h>
+#include <sir/ast_dumper.h>
 
 // NOTE: main() can  throw right now
 int main() { // NOLINT
     using namespace stc;
-    using namespace stc::ir;
+    using namespace stc::sir;
     using namespace stc::glsl;
 
     GLSLCtx ctx{};

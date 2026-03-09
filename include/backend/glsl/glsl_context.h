@@ -1,17 +1,17 @@
 #pragma once
 
-#include "ir/ast_context.h"
+#include "sir/ast_context.h"
 
 namespace stc::glsl {
 
-using namespace ir;
+using namespace stc::types;
 
-class GLSLCtx : public ASTCtx {
+class GLSLCtx : public sir::ASTCtx {
 public:
     const TypeId gl_void, gl_bool, gl_int, gl_uint, gl_float, gl_double;
 
     explicit GLSLCtx()
-        : ASTCtx{},
+        : sir::ASTCtx{},
           gl_void{type_pool.void_td()},
           gl_bool{type_pool.bool_td()},
           gl_int{type_pool.int_td(32, true)},

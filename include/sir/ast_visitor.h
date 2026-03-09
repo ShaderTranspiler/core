@@ -1,9 +1,9 @@
 #pragma once
 
-#include "ir/ast_context.h"
+#include "sir/ast_context.h"
 #include <type_traits>
 
-namespace stc::ir {
+namespace stc::sir {
 
 #define STC_AST_VISITOR_DECL(RetTy, type) RetTy visit_##type(type&);
 
@@ -12,7 +12,7 @@ template <typename ImplTy, typename RetTy>
 concept CIsASTVisitorImpl = requires (ImplTy v) {
 
     #define X(type, kind) { v.visit_##type(std::declval<type&>()) } -> std::same_as<RetTy>;
-        #include "ir/node_defs/all_nodes.def"
+        #include "sir/node_defs/all_nodes.def"
     #undef X
 
 };
@@ -20,7 +20,7 @@ concept CIsASTVisitorImpl = requires (ImplTy v) {
 
 // CRTP-style base AST visitor class
 // derived visitors need to implement a visit_T function for every Stmt and Decl in the AST
-// ir/node_defs/all_nodes.def can be used with the X-macro system to automatically generate
+// sir/node_defs/all_nodes.def can be used with the X-macro system to automatically generate
 // declarations for these, as seen below
 // visitor declarations in the base class have been commented out, as both cases lead to the
 // same kind of linker error, when not implemented properly (these errors contain the exact member
@@ -64,7 +64,7 @@ public:
                 case (NodeKind::kind):                                                             \
                     return impl_this()->visit_##type(as<type>(node));
 
-                #include "ir/node_defs/all_nodes.def"
+                #include "sir/node_defs/all_nodes.def"
             #undef X
 
             default:
@@ -84,8 +84,8 @@ public:
     void pre_visit(NodeId) {}
 
     // #define X(type, kind) STC_AST_VISITOR_DECL(RetTy, type)
-    //     #include "ir/node_defs/all_nodes.def"
+    //     #include "sir/node_defs/all_nodes.def"
     // #undef X
 };
 
-} // namespace stc::ir
+} // namespace stc::sir

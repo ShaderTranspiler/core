@@ -3,9 +3,9 @@
 #include <limits>
 #include <stdexcept>
 
-#include "ir/type_pool.h"
+#include "types/type_pool.h"
 
-namespace stc::ir {
+namespace stc::types {
 
 const TypeDescriptor& TypePool::get_td(TypeId id) const {
     return *arena.get_ptr<TypeDescriptor>(id);
@@ -103,4 +103,4 @@ TypeId TypePool::make_struct_td(std::string name, std::vector<StructData::FieldI
     return t_id;
 }
 
-} // namespace stc::ir
+} // namespace stc::types

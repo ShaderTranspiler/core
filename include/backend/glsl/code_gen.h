@@ -2,10 +2,12 @@
 
 #include <sstream>
 
-#include "backends/glsl/glsl_context.h"
-#include "ir/ast_visitor.h"
+#include "backend/glsl/glsl_context.h"
+#include "sir/ast_visitor.h"
 
 namespace stc::glsl {
+
+using namespace stc::sir;
 
 class GLSLCodeGenVisitor : public ASTVisitor<GLSLCodeGenVisitor, void, const GLSLCtx> {
 public:
@@ -17,7 +19,7 @@ public:
 
     // clang-format off
     #define X(type, kind) STC_AST_VISITOR_DECL(void, type)
-        #include "ir/node_defs/all_nodes.def"
+        #include "sir/node_defs/all_nodes.def"
     #undef X
     // clang-format on
 

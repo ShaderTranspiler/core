@@ -1,7 +1,7 @@
 #include <cstring>
 #include <iostream>
 
-#include "frontends/jl/pkg_driver.h"
+#include "frontend/jl/pkg_driver.h"
 
 // NOLINTBEGIN
 

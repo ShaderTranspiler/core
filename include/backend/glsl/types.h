@@ -1,11 +1,11 @@
 #pragma once
 
-#include "ir/type_descriptors.h"
-#include "ir/type_pool.h"
+#include "types/type_descriptors.h"
+#include "types/type_pool.h"
 
 namespace stc::glsl {
 
-using namespace ir;
+using namespace stc::types;
 
 inline std::string type_prefix(const TypeDescriptor& td) {
     assert(td.is_scalar() && "trying to get prefix of non-scalar type");

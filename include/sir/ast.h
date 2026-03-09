@@ -11,14 +11,16 @@
 #include "common/concepts.h"
 #include "common/src_info.h"
 #include "common/utils.h"
-#include "ir/types.h"
+#include "types/types.h"
 
 #define SAME_NODE_T_DEF(Kind)                                                                      \
     static bool same_node_t(const NodeBase* node) {                                                \
         return node->kind() == (Kind);                                                             \
     }
 
-namespace stc::ir {
+namespace stc::sir {
+
+using namespace stc::types;
 
 // CLEANUP: go through structs and make use of _node_storage properly
 // FEATURE: trailing objects pattern where applicable
@@ -44,21 +46,21 @@ enum class NodeKind : uint8_t {
     FirstDecl,
 
     #define X_FIRST(type, kind) kind = FirstDecl,
-        #include "node_defs/decl.def"
+        #include "sir/node_defs/decl.def"
     #undef X_FIRST
 
     LastDecl = FieldDecl,
     FirstExpr,
 
     #define X_FIRST(type, kind) kind = FirstExpr,
-        #include "node_defs/expr.def"
+        #include "sir/node_defs/expr.def"
     #undef X_FIRST
 
     LastExpr = DeclRef,
     FirstStmt,
 
     #define X_FIRST(type, kind) kind = FirstStmt,
-        #include "node_defs/stmt.def"
+        #include "sir/node_defs/stmt.def"
     #undef X_FIRST
 
     LastStmt = Return,
@@ -409,6 +411,6 @@ std::unique_ptr<To> dyn_unique_cast(std::unique_ptr<From>&& ptr) {
     return nullptr;
 }
 
-} // namespace stc::ir
+} // namespace stc::sir
 
 #undef SAME_NODE_T_DEF

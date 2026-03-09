@@ -5,9 +5,9 @@
 #include <vector>
 
 #include "common/bump_arena.h"
-#include "ir/type_descriptors.h"
+#include "types/type_descriptors.h"
 
-namespace stc::ir {
+namespace stc::types {
 
 class TypePool final {
 private:
@@ -63,4 +63,4 @@ private:
     std::unordered_map<std::string_view, TypeId> struct_map;
 };
 
-} // namespace stc::ir
+} // namespace stc::types

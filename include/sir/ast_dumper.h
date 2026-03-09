@@ -2,9 +2,9 @@
 
 #include <iostream>
 
-#include "ir/ast_visitor.h"
+#include "sir/ast_visitor.h"
 
-namespace stc::ir {
+namespace stc::sir {
 
 class ASTDumper : public ASTVisitor<ASTDumper, void, const ASTCtx> {
 public:
@@ -15,7 +15,7 @@ public:
 
     // clang-format off
     #define X(type, kind) STC_AST_VISITOR_DECL(void, type)
-        #include "ir/node_defs/all_nodes.def"
+        #include "sir/node_defs/all_nodes.def"
     #undef X
     // clang-format on
 
@@ -31,4 +31,4 @@ private:
 
 static_assert(CIsASTVisitorImpl<ASTDumper, void>);
 
-} // namespace stc::ir
+} // namespace stc::sir

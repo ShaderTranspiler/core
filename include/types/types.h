@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ir/type_descriptors.h"
+#include "types/type_descriptors.h"
 
-namespace stc::ir {
+namespace stc::types {
 
 // TODO: use double-interning instead (intern base types and qual types)
 
@@ -43,4 +43,4 @@ struct Type {
     bool operator==(const Type&) const = default;
 };
 
-} // namespace stc::ir
+} // namespace stc::types

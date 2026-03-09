@@ -13,10 +13,10 @@
 #include "common/concepts.h"
 #include "common/utils.h"
 
-namespace stc::ir {
+namespace stc::types {
 
 // basic types modelled after SPIR-V's unified specs
-// some liberties have been taken for a more general IR type system
+// some liberties have been taken for a more general sir type system
 // this includes allowing non-float types as matrix component types,
 // these can potentially be rewritten as arrays in the output (similarly to slang -> GLSL/SPIR-V)
 
@@ -170,70 +170,70 @@ static_assert(sizeof(TypeDescriptor) == sizeof(TDVariantType));
 std::string to_string(const TypeDescriptor&, const TypePool&);
 std::string to_string(TypeId, const TypePool&);
 
-} // namespace stc::ir
+} // namespace stc::types
 
 template <>
-struct std::hash<stc::ir::TypeId> {
-    size_t operator()(const stc::ir::TypeId& x) const noexcept {
-        return std::hash<stc::ir::TypeId::id_type>{}(x.value);
+struct std::hash<stc::types::TypeId> {
+    size_t operator()(const stc::types::TypeId& x) const noexcept {
+        return std::hash<stc::types::TypeId::id_type>{}(x.value);
     }
 };
 
 template <>
-struct std::hash<stc::ir::VoidTD> {
-    size_t operator()(const stc::ir::VoidTD&) const noexcept { return 0; }
+struct std::hash<stc::types::VoidTD> {
+    size_t operator()(const stc::types::VoidTD&) const noexcept { return 0; }
 };
 
 template <>
-struct std::hash<stc::ir::BoolTD> {
-    size_t operator()(const stc::ir::BoolTD&) const noexcept { return 0; }
+struct std::hash<stc::types::BoolTD> {
+    size_t operator()(const stc::types::BoolTD&) const noexcept { return 0; }
 };
 
 template <>
-struct std::hash<stc::ir::IntTD> {
-    size_t operator()(const stc::ir::IntTD& x) const noexcept {
+struct std::hash<stc::types::IntTD> {
+    size_t operator()(const stc::types::IntTD& x) const noexcept {
         return stc::hash_combine(std::hash<uint32_t>{}(x.width), x.is_signed);
     }
 };
 
 template <>
-struct std::hash<stc::ir::FloatTD> {
-    size_t operator()(const stc::ir::FloatTD& x) const noexcept {
+struct std::hash<stc::types::FloatTD> {
+    size_t operator()(const stc::types::FloatTD& x) const noexcept {
         return stc::hash_combine(std::hash<uint32_t>{}(x.width), static_cast<uint8_t>(x.enc));
     }
 };
 
 template <>
-struct std::hash<stc::ir::VectorTD> {
-    size_t operator()(const stc::ir::VectorTD& x) const noexcept {
+struct std::hash<stc::types::VectorTD> {
+    size_t operator()(const stc::types::VectorTD& x) const noexcept {
         return stc::hash_combine(std::hash<uint32_t>{}(x.component_count), x.component_type_id);
     }
 };
 
 template <>
-struct std::hash<stc::ir::MatrixTD> {
-    size_t operator()(const stc::ir::MatrixTD& x) const noexcept {
+struct std::hash<stc::types::MatrixTD> {
+    size_t operator()(const stc::types::MatrixTD& x) const noexcept {
         return stc::hash_combine(std::hash<uint32_t>{}(x.column_count), x.column_type_id);
     }
 };
 
 template <>
-struct std::hash<stc::ir::ArrayTD> {
-    size_t operator()(const stc::ir::ArrayTD& x) const noexcept {
+struct std::hash<stc::types::ArrayTD> {
+    size_t operator()(const stc::types::ArrayTD& x) const noexcept {
         return stc::hash_combine(std::hash<uint32_t>{}(x.length), x.element_type_id);
     }
 };
 
 template <>
-struct std::hash<stc::ir::StructData::FieldInfo> {
-    size_t operator()(const stc::ir::StructData::FieldInfo& x) const noexcept {
+struct std::hash<stc::types::StructData::FieldInfo> {
+    size_t operator()(const stc::types::StructData::FieldInfo& x) const noexcept {
         return stc::hash_combine(std::hash<std::string>{}(x.name), x.type);
     }
 };
 
 template <>
-struct std::hash<stc::ir::StructData> {
-    size_t operator()(const stc::ir::StructData& x) const noexcept {
+struct std::hash<stc::types::StructData> {
+    size_t operator()(const stc::types::StructData& x) const noexcept {
         size_t h = std::hash<std::string>{}(x.name);
 
         for (const auto& field : x.fields) {
@@ -245,14 +245,15 @@ struct std::hash<stc::ir::StructData> {
 };
 
 template <>
-struct std::hash<stc::ir::StructTD> {
-    size_t operator()(const stc::ir::StructTD& x) const noexcept {
-        const stc::ir::StructData& data = x.data != nullptr ? *x.data : stc::ir::StructData{"", {}};
+struct std::hash<stc::types::StructTD> {
+    size_t operator()(const stc::types::StructTD& x) const noexcept {
+        const stc::types::StructData& data =
+            x.data != nullptr ? *x.data : stc::types::StructData{"", {}};
 
-        return std::hash<stc::ir::StructData>{}(data);
+        return std::hash<stc::types::StructData>{}(data);
     }
 };
 
-static_assert(stc::CIsUnorderedMapKey<stc::ir::TDVariantType>);
+static_assert(stc::CIsUnorderedMapKey<stc::types::TDVariantType>);
 
 #undef STD_HASH_SPEC

@@ -1,11 +1,11 @@
 #include <format>
 
-#include "ir/ast_dumper.h"
-#include "ir/type_descriptors.h"
+#include "sir/ast_dumper.h"
+#include "types/type_descriptors.h"
 
 namespace {
 
-using OpKind = stc::ir::BinaryOp::OpKind;
+using OpKind = stc::sir::BinaryOp::OpKind;
 
 std::string op_str(OpKind op) {
     switch (op) {
@@ -37,7 +37,7 @@ inline std::string label(const std::string& label_str) {
 
 } // namespace
 
-namespace stc::ir {
+namespace stc::sir {
 
 std::string ASTDumper::type_str(TypeId id) const {
     return to_string(id, ctx.type_pool);
@@ -259,4 +259,4 @@ void ASTDumper::visit_ReturnStmt(ReturnStmt& return_stmt) {
     dec_indent();
 }
 
-} // namespace stc::ir
+} // namespace stc::sir
