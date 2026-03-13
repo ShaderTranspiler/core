@@ -70,7 +70,7 @@ bool StructTD::operator==(const StructTD& other) const {
 }
 
 bool TypeDescriptor::operator==(const TypeDescriptor& other) const {
-    return type_data.index() == other.type_data.index() && type_data == other.type_data;
+    return _type_data.index() == other._type_data.index() && _type_data == other._type_data;
 }
 
 std::string to_string(const TypeDescriptor& type, const TypePool& type_pool) {
@@ -97,7 +97,7 @@ std::string to_string(const TypeDescriptor& type, const TypePool& type_pool) {
         } else if constexpr (std::is_same_v<T, ArrayTD>) {
             const TypeDescriptor& el_type = type_pool.get_td(arg.element_type_id);
             return std::format("array[{}] of {}", arg.length,
-                               std::holds_alternative<ArrayTD>(el_type.type_data)
+                               std::holds_alternative<ArrayTD>(el_type.type_data())
                                    ? std::format("({})", to_string(el_type, type_pool))
                                    : to_string(el_type, type_pool));
         } else if constexpr (std::is_same_v<T, StructTD>) {
@@ -105,16 +105,19 @@ std::string to_string(const TypeDescriptor& type, const TypePool& type_pool) {
             return std::format("struct {}", arg.data->name);
         } else if constexpr (std::is_same_v<T, BuiltinTD>) {
             // TODO
-            return "???";
+            return "?";
         } else {
             static_assert(false, "missing type descriptor case(s) in visitor");
         }
     };
 
-    return std::visit(visitor, type.type_data);
+    return std::visit(visitor, type.type_data());
 }
 
 std::string to_string(TypeId type_id, const TypePool& type_pool) {
+    if (type_id.is_null())
+        return "null type";
+
     return to_string(type_pool.get_td(type_id), type_pool);
 }
 

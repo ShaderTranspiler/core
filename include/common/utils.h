@@ -74,28 +74,6 @@ bool is_power_of_two(T x) {
     return x != 0 && (x & (x - 1)) == 0;
 }
 
-template <typename To, typename From>
-requires requires (From* f) { dynamic_cast<To*>(f); }
-std::unique_ptr<To> dynamic_unique_cast(std::unique_ptr<From>&& ptr) {
-    if (auto* cast_ptr = dynamic_cast<To*>(ptr.get())) {
-        std::ignore = ptr.release();
-        return std::unique_ptr<To>{cast_ptr};
-    }
-
-    return nullptr;
-}
-
-// only use when it's already verified that From can be successfully cast to To
-template <typename To, typename From>
-requires requires (From* f) { dynamic_cast<To*>(f); }
-std::unique_ptr<To> static_unique_cast(std::unique_ptr<From>&& ptr) {
-    assert(dynamic_cast<To*>(ptr.get()) != nullptr &&
-           "Pointer passed to static_unique_cast could not be cast to target pointer type! This "
-           "will produce UB without an explicit warning/error in non-debug builds!");
-
-    return std::unique_ptr<To>(static_cast<To*>(ptr.release()));
-}
-
 // same as boost's current hash_combine implementation for 32/64-bit size_t:
 // https://www.boost.org/doc/libs/latest/libs/container_hash/doc/html/hash.html#notes_hash_combine
 template <typename T>
@@ -150,10 +128,20 @@ template <typename T>
 concept CStrongId =
     requires { typename T::id_type; } && std::derived_from<T, StrongId<typename T::id_type>>;
 
+template <typename T>
+concept CNullableStrongId = CStrongId<T> && requires {
+    { T::null_id() } -> std::convertible_to<T>;
+};
+
 template <typename... Ts>
 inline constexpr bool dependent_false_v = false;
 
 template <typename T, typename V>
 concept CEnumOf = std::is_enum_v<T> && std::same_as<std::underlying_type_t<T>, V>;
+
+template <typename... Args>
+constexpr bool no_nullptrs(Args*... args) {
+    return ((args != nullptr) && ...);
+}
 
 } // namespace stc

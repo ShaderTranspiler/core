@@ -8,6 +8,9 @@
 namespace stc::types {
 
 const TypeDescriptor& TypePool::get_td(TypeId id) const {
+    assert(!id.is_null() && "get_td called with null id");
+    assert(arena.get_ptr<TypeDescriptor>(id) != nullptr && "arena returned null for type id");
+
     return *arena.get_ptr<TypeDescriptor>(id);
 }
 
@@ -28,11 +31,16 @@ TypeId TypePool::insert_or_get(TDVariantType type, bool fail_on_get) {
         return pooled_id;
     }
 
+    // doesn't use arena.emplace to keep TypeDescriptor ctors private to TDs and TypePool
     auto [id, mem] = arena.allocate_for<TypeDescriptor>();
     new (mem) TypeDescriptor{type};
 
     pool[type] = id;
     return static_cast<TypeId>(id);
+}
+
+TypeId TypePool::bool_td() {
+    return insert_or_get(BoolTD{});
 }
 
 TypeId TypePool::int_td(uint32_t width, bool is_signed) {

@@ -16,14 +16,15 @@ Here is a (very) rough overview of the development timeline and its current prog
 - [x] Julia IR
 - [x] Julia -> SIR lowering
 - [x] GLSL code generation
+- [ ] Julia Pkg API
 - [ ] Julia type inference (bidirectional type checking)
 - [ ] Configuration API
 - [ ] SIR-level implicit casting support
 - [ ] Multi-file and multi-function support
-- [ ] Expand Julia -> GLSL pipeline
-- [ ] Julia Pkg API
-- [ ] Unit tests
-- [ ] CI/CD
+- [ ] Expand supported Julia and GLSL subsets
+- [ ] Tests
+- [ ] CI/CD (should be as simple as auto running pre-existing CMake targets on GitHub)
+- [ ] MinGW support in CMakeLists.txt for Windows builds
 - [ ] Wiki?
 
 Note that these aren't necessarily in "chronological" order, and the points differ vastly in difficulty and time needed to implement them.
@@ -84,7 +85,7 @@ A build, unless configured to operate otherwise, will output the produced librar
 
 ### Sandbox
 
-Any source files named `run_*.cpp` in the `sandbox/` directory will be built as a separate executable (and have a unique target). These all have the built library linked automatically, and its produced output copied next to the executables.
+Any source files named `sb_*.cpp` in the `sandbox/` directory will be built as a separate executable (and have a unique target). These all have the built library linked automatically, and its produced output copied next to the executables.
 
 Through sandbox executables, it's easy to produce example, demo, manual test or playground code that interacts with the library from an "external" perspective. Most files in `sandbox/` will thus probably contain development-related, temporary code that is useful while writing the transpiler.
 

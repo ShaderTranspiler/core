@@ -52,8 +52,11 @@ void SIRDumper::dec_indent(size_t level) {
 }
 
 void SIRDumper::pre_visit_id(NodeId node_id) {
+    NodeBase* node = ctx.get_node(node_id);
+
     out << indent() << '[' << std::format("{:p}", static_cast<void*>(ctx.get_node(node_id))) << "|"
-        << node_id << "]\n";
+        << node_id << '|'
+        << (node != nullptr ? std::to_string(static_cast<uint8_t>(node->kind())) : "?") << "]\n";
 }
 
 void SIRDumper::visit_VarDecl(VarDecl& var_decl) {
@@ -169,7 +172,7 @@ void SIRDumper::visit_StructInstantiationLiteral(StructInstantiationLiteral& si_
 }
 
 void SIRDumper::visit_ScopedExpr(ScopedExpr& scoped_expr) {
-    out << "ScopedExpr:\n";
+    out << indent() << "ScopedExpr:\n";
 
     inc_indent();
     visit(scoped_expr.inner_expr);
@@ -217,7 +220,7 @@ void SIRDumper::visit_DeclRefExpr(DeclRefExpr& decl_ref) {
 }
 
 void SIRDumper::visit_ScopedStmt(ScopedStmt& scoped_stmt) {
-    out << "ScopedStmt:\n";
+    out << indent() << "ScopedStmt:\n";
     inc_indent();
     visit(scoped_stmt.inner_stmt);
     dec_indent();

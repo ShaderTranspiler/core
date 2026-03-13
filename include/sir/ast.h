@@ -87,7 +87,7 @@ struct NodeBase {
         assert(node_storage <= 0xFFFFFF && "implicit truncation in node_storage of NodeBase");
     }
 
-    // NOTE: node_storage really returns a "uint24_t"
+    // NOTE: node_storage actually returns a "uint24_t"
     uint32_t node_storage() const { return _node_storage; }
 
     [[nodiscard]] NodeKind kind() const { return static_cast<NodeKind>(_kind); }
@@ -105,10 +105,10 @@ struct Decl : public NodeBase {
     explicit Decl(SrcLocationId location, NodeKind kind, std::string identifier)
         : NodeBase{location, kind}, identifier{std::move(identifier)} {}
 
-    Decl(const Decl&)            = default;
-    Decl(Decl&&)                 = default;
-    Decl& operator=(const Decl&) = default;
-    Decl& operator=(Decl&&)      = default;
+    Decl(const Decl&)                = default;
+    Decl& operator=(const Decl&)     = default;
+    Decl(Decl&&) noexcept            = default;
+    Decl& operator=(Decl&&) noexcept = default;
 
     static bool same_node_t(const NodeBase* node) {
         return NodeKind::FirstDecl <= node->kind() && node->kind() <= NodeKind::LastDecl;
@@ -119,10 +119,10 @@ struct Stmt : public NodeBase {
     explicit Stmt(SrcLocationId location, NodeKind kind, uint32_t node_storage = 0U)
         : NodeBase{location, kind, node_storage} {}
 
-    Stmt(const Stmt&)            = default;
-    Stmt(Stmt&&)                 = default;
-    Stmt& operator=(const Stmt&) = default;
-    Stmt& operator=(Stmt&&)      = default;
+    Stmt(const Stmt&)                = default;
+    Stmt& operator=(const Stmt&)     = default;
+    Stmt(Stmt&&) noexcept            = default;
+    Stmt& operator=(Stmt&&) noexcept = default;
 
     static bool same_node_t(const NodeBase* node) {
         return NodeKind::FirstStmt <= node->kind() && node->kind() <= NodeKind::LastStmt;
@@ -220,7 +220,7 @@ private:
 
 struct BoolLiteral : public Expr {
     explicit BoolLiteral(SrcLocationId location, bool value)
-        : Expr{location, NodeKind::BoolLit, TypeId::bool_id(), static_cast<uint8_t>(value)} {}
+        : Expr{location, NodeKind::BoolLit, static_cast<uint8_t>(value)} {}
 
     bool value() const { return static_cast<bool>(node_storage()); }
 
@@ -291,6 +291,8 @@ struct ScopedExpr : public Expr {
 
     explicit ScopedExpr(SrcLocationId location, NodeId inner_expr)
         : Expr{location, NodeKind::ScopedExpr}, inner_expr{inner_expr} {}
+
+    SAME_NODE_T_DEF(NodeKind::ScopedExpr)
 };
 
 struct BinaryOp : public Expr {
@@ -352,6 +354,8 @@ struct ScopedStmt : public Stmt {
 
     explicit ScopedStmt(SrcLocationId location, NodeId inner_stmt)
         : Stmt{location, NodeKind::ScopedStmt}, inner_stmt{inner_stmt} {}
+
+    SAME_NODE_T_DEF(NodeKind::ScopedStmt)
 };
 
 struct IfStmt : public Stmt {

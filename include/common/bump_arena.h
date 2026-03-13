@@ -33,25 +33,43 @@ private:
 public:
     static constexpr SizeTy null_id = 0;
 
-    explicit BumpArena(SizeTy initial_slab_capacity = 4096)
-        : slabs{}, slab_end_offsets{}, cur_offset{1}, last_slab_hint{0} {
-
+    explicit BumpArena(SizeTy initial_slab_capacity = 4096) {
         if (initial_slab_capacity == 0)
             throw std::logic_error{"Slab capacity cannot be zero"};
 
         slabs.reserve(32);
 
         make_new_slab(initial_slab_capacity);
+
+        assert(no_nullptrs(slabs_tail, cur_ptr, end_ptr) && !slabs.empty() &&
+               !slab_end_offsets.empty() && "broken BumpArena initialization logic");
     }
 
-    ~BumpArena() { run_dtors(); }
+    ~BumpArena() {
+        if (cur_ptr != nullptr)
+            run_dtors();
+    }
 
     BumpArena(const BumpArena&)            = delete;
-    BumpArena(BumpArena&&)                 = delete;
     BumpArena& operator=(const BumpArena&) = delete;
-    BumpArena& operator=(BumpArena&&)      = delete;
+
+    // default construction is cheap, so move ctor/assignment can be unified through a helper
+    BumpArena(BumpArena&& other) noexcept { handle_move(std::move(other)); }
+
+    BumpArena& operator=(BumpArena&& other) noexcept {
+        if (this == &other)
+            return *this;
+
+        if (cur_ptr != nullptr)
+            run_dtors();
+
+        handle_move(std::move(other));
+
+        return *this;
+    }
 
     void reset() {
+        assert(cur_ptr != nullptr && "do not reuse moved-from arenas by resetting them");
         assert(!slabs.empty() && "no slabs inside arena");
 
         run_dtors();
@@ -65,7 +83,7 @@ public:
         last_slab_hint = 0;
         cur_offset     = 1;
         slabs_tail     = slabs[0].get();
-        cur_ptr        = slabs[0]->buffer;
+        cur_ptr        = slabs[0]->buffer.get();
         end_ptr        = slabs[0]->get_end_ptr();
     }
 
@@ -82,8 +100,8 @@ public:
         return can_allocate(SizeT_mul(sizeof(T), n), alignof(T));
     }
 
-    // ! allocations that would not fit into a newly allocated slab are bad_alloc-ed
-    // ! this is intentional, as BumpArena is mostly intended to store small types
+    // ! allocations that would not fit into a newly allocated slab are bad_alloc-ed.
+    // ! this is intentional, as BumpArena is mostly meant to store small types.
     // ! to work around this, provide an appropriate initial_slab_capacity when creating the arena
     [[nodiscard]] std::pair<SizeTy, void*> allocate(SizeTy size, SizeTy alignment = 8) {
         if (!is_power_of_two(alignment))
@@ -121,14 +139,26 @@ public:
 
     template <typename T, typename... Args>
     [[nodiscard]] std::pair<SizeTy, T*> emplace(Args&&... args) {
+        // allocation and initialization are handled in two passes, so that if T or the dtor would
+        // fit into memory and offset, but not together, neither of them get initialized before the
+        // bad_alloc is thrown.
+        // also, this way, dtor_tail only gets modified if allocations were successful, so the arena
+        // remains in a usable state even if the exception is caught and ignored
+
+        void* dtor_mem = nullptr;
+        [[maybe_unused]] void (*dtor_call)(void*);
+
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            dtor_mem  = allocate_for<DtorLLNode>().second;
+            dtor_call = [](void* obj) { static_cast<T*>(obj)->~T(); };
+        }
+
         auto [offset, mem] = allocate_for<T>();
 
         T* obj_ptr = new (mem) T{std::forward<Args>(args)...};
 
         if constexpr (!std::is_trivially_destructible_v<T>) {
-            auto [_, dtor_mem] = allocate_for<DtorLLNode>();
-            auto dtor_call     = [](void* obj) { static_cast<T*>(obj)->~T(); };
-            dtor_tail          = new (dtor_mem) DtorLLNode{dtor_call, obj_ptr, dtor_tail};
+            dtor_tail = new (dtor_mem) DtorLLNode{dtor_call, obj_ptr, dtor_tail};
         }
 
         return {offset, obj_ptr};
@@ -171,27 +201,25 @@ public:
 
 private:
     struct Slab {
-        std::byte* buffer;
+        std::unique_ptr<std::byte[]> buffer;
         SizeTy capacity;
         SizeTy start_offset;
 
         explicit Slab(SizeTy capacity, SizeTy start_offset)
-            : buffer{static_cast<std::byte*>(::operator new(capacity))},
+            : buffer{std::make_unique_for_overwrite<std::byte[]>(capacity)},
               capacity{capacity},
               start_offset{start_offset} {
 
             assert(capacity != 0 && "slab capacity cannot be zero");
         }
 
-        ~Slab() { ::operator delete(buffer); }
-
-        Slab(const Slab&)            = delete;
-        Slab& operator=(const Slab&) = delete;
-        Slab(Slab&&)                 = delete;
-        Slab& operator=(Slab&&)      = delete;
+        Slab(const Slab&)                = delete;
+        Slab& operator=(const Slab&)     = delete;
+        Slab(Slab&&) noexcept            = default;
+        Slab& operator=(Slab&&) noexcept = default;
 
         // pointer to first byte past buffer
-        std::byte* get_end_ptr() const { return buffer + capacity; }
+        std::byte* get_end_ptr() const { return buffer.get() + capacity; }
 
         // offset to first byte past buffer
         SizeTy get_end_offset() const { return SizeT_add(start_offset, capacity); }
@@ -202,7 +230,7 @@ private:
 
         void* offset_to_ptr(SizeTy offset) const {
             assert(contains_offset(offset) && "offset outside slab's buffer");
-            return buffer + SizeT_sub(offset, start_offset);
+            return buffer.get() + SizeT_sub(offset, start_offset);
         }
     };
 
@@ -212,22 +240,26 @@ private:
         DtorLLNode* prev;
     };
 
-    std::vector<std::unique_ptr<Slab>> slabs;
-    std::vector<SizeTy> slab_end_offsets;
-    Slab* slabs_tail   = nullptr;
-    std::byte* cur_ptr = nullptr;
-    std::byte* end_ptr = nullptr;
-    SizeTy cur_offset;
-
-    DtorLLNode* dtor_tail = nullptr;
-
-    mutable SizeTy last_slab_hint;
+    std::vector<std::unique_ptr<Slab>> slabs{};
+    std::vector<SizeTy> slab_end_offsets{};
+    Slab* slabs_tail              = nullptr;
+    std::byte* cur_ptr            = nullptr;
+    std::byte* end_ptr            = nullptr;
+    SizeTy cur_offset             = 1U;
+    DtorLLNode* dtor_tail         = nullptr;
+    mutable SizeTy last_slab_hint = null_id;
 
     static uintptr_t get_aligned_size(uintptr_t size, SizeTy alignment) {
         if (size > std::numeric_limits<uintptr_t>::max() - alignment + 1)
             throw std::overflow_error{"The specified pointer alignment would overflow"};
 
-        return (size + alignment - 1) / alignment * alignment;
+        // below is the same as: (size + alignment - 1U) / alignment * alignment
+        // see: https://llvm.org/doxygen/Alignment_8h_source.html#l00144
+
+        // upcast so the bitmask trick works
+        uintptr_t alignment_uptr = static_cast<uintptr_t>(alignment);
+
+        return (size + alignment_uptr - 1U) & ~(alignment_uptr - 1U);
     }
 
     static std::byte* get_aligned_ptr(std::byte* ptr, SizeTy alignment) {
@@ -236,7 +268,7 @@ private:
     }
 
     void run_dtors() {
-        while (dtor_tail) {
+        while (dtor_tail != nullptr) {
             dtor_tail->call_dtor(dtor_tail->obj);
             dtor_tail = dtor_tail->prev;
         }
@@ -268,9 +300,26 @@ private:
         slab_end_offsets.push_back(SizeT_add(start_offset, new_capacity));
 
         slabs_tail = slabs.back().get();
-        cur_ptr    = slabs_tail->buffer;
+        cur_ptr    = slabs_tail->buffer.get();
         cur_offset = slabs_tail->start_offset;
         end_ptr    = slabs_tail->get_end_ptr();
+    }
+
+    void handle_move(BumpArena&& other) noexcept {
+        slabs            = std::move(other.slabs);
+        slab_end_offsets = std::move(other.slab_end_offsets);
+        slabs_tail       = other.slabs_tail;
+        cur_ptr          = other.cur_ptr;
+        end_ptr          = other.end_ptr;
+        cur_offset       = other.cur_offset;
+        dtor_tail        = other.dtor_tail;
+        last_slab_hint   = other.last_slab_hint;
+
+        other.cur_ptr = other.end_ptr = nullptr;
+        other.dtor_tail               = nullptr;
+        other.slabs_tail              = nullptr;
+        other.cur_offset              = null_id;
+        other.last_slab_hint          = null_id;
     }
 };
 
@@ -285,6 +334,6 @@ template <typename SizeTy>
 struct is_bump_arena<BumpArena<SizeTy>> : std::true_type {};
 
 template <typename T>
-concept CIsBumpArena = is_bump_arena<T>::value;
+concept CBumpArena = is_bump_arena<T>::value;
 
 }; // namespace stc

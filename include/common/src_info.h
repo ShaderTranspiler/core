@@ -43,7 +43,7 @@ private:
         : line(0), col(0) {}
 };
 
-// used by SrcInfoManager, to emplace invalid state into arena
+// used by SrcInfoPool, to emplace invalid state into arena
 static_assert(std::is_trivially_copy_constructible_v<SrcLocation>);
 
 struct SrcLocationId : public StrongId<uint32_t> {
@@ -57,26 +57,30 @@ std::nullptr_t error(const SrcFile& file, SrcLocation location, std::string_view
 std::nullptr_t warning(const SrcFile& file, SrcLocation location, std::string_view msg,
                        std::ostream& out = std::cerr);
 
-class SrcInfoManager {
+class SrcInfoPool {
 private:
-    using ArenaTy      = BumpArena<SrcLocationId::id_type>;
-    using ArenaAllocTy = BumpArenaAllocator<SrcLocationId::id_type, SrcLocation>;
+    using SizeTy       = SrcLocationId::id_type;
+    using ArenaTy      = BumpArena<SizeTy>;
+    using ArenaAllocTy = BumpArenaAllocator<SizeTy, SrcLocation>;
 
 public:
     // ! expects arena to not be modified by others, only inspected
-    explicit SrcInfoManager(ArenaTy& arena, size_t initial_file_capacity = 4);
+    explicit SrcInfoPool(SizeTy initial_location_capacity, size_t initial_file_capacity = 4);
 
-    SrcInfoManager(const SrcInfoManager&)            = delete;
-    SrcInfoManager(SrcInfoManager&&)                 = default;
-    SrcInfoManager& operator=(const SrcInfoManager&) = delete;
-    SrcInfoManager& operator=(SrcInfoManager&&)      = default;
+    SrcInfoPool(const SrcInfoPool&)                = delete;
+    SrcInfoPool& operator=(const SrcInfoPool&)     = delete;
+    SrcInfoPool(SrcInfoPool&&) noexcept            = default;
+    SrcInfoPool& operator=(SrcInfoPool&&) noexcept = default;
 
     [[nodiscard]] SrcLocationId make_location(uint32_t line, uint32_t col);
     [[nodiscard]] uint64_t make_file(std::string path);
 
     const SrcFile& get_file_for_location(SrcLocationId loc_id) const;
 
+    const ArenaTy& get_arena() const { return arena; }
+
 private:
+    ArenaTy arena;
     ArenaAllocTy arena_alloc;
 
     std::vector<std::pair<SrcLocationId, SrcFile>> file_bounds;

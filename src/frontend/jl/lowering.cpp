@@ -36,6 +36,16 @@ SIRNodeId JLLoweringVisitor::visit_ptr(Expr* node) {
     return this->dispatch_wrapper(node);
 }
 
+SIRNodeId JLLoweringVisitor::visit_CompoundExpr(CompoundExpr& cmpd) {
+    std::vector<SIRNodeId> sir_nodes;
+    sir_nodes.reserve(cmpd.body.size());
+
+    for (NodeId expr : cmpd.body)
+        sir_nodes.push_back(visit_and_check(expr));
+
+    return emplace_node<sir::CompoundStmt>(cmpd.location, std::move(sir_nodes));
+}
+
 SIRNodeId JLLoweringVisitor::visit_BoolLiteral(BoolLiteral& bool_lit) {
     return emplace_node<sir::BoolLiteral>(bool_lit.location, bool_lit.value());
 }
@@ -73,11 +83,16 @@ SIRNodeId JLLoweringVisitor::visit_StringLiteral([[maybe_unused]] StringLiteral&
     return fail("unsupported String literal node not caught by sema");
 }
 
-SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
-    auto* str_lit = ctx.get_dyn<StringLiteral>(fn_call.target_fn);
+SIRNodeId JLLoweringVisitor::visit_SymbolLiteral([[maybe_unused]] SymbolLiteral& lit) {
+    // TODO
+    throw std::logic_error{"using unimplemented feature: decl lookup"};
+}
 
-    if (str_lit == nullptr)
-        return fail("non-string literal node in FunctionCall's target_fn not caught by sema");
+SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
+    auto* sym_lit = ctx.get_dyn<SymbolLiteral>(fn_call.target_fn);
+
+    if (sym_lit == nullptr)
+        return fail("non symbol literal node in FunctionCall's target_fn not caught by sema");
 
     std::vector<SIRNodeId> args{};
     args.reserve(fn_call.args.size());
@@ -85,14 +100,19 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     for (NodeId arg : fn_call.args)
         args.push_back(visit_and_check(arg));
 
-    return emplace_node<sir::FunctionCall>(fn_call.location, std::move(str_lit->value),
+    return emplace_node<sir::FunctionCall>(fn_call.location, std::move(sym_lit->value),
                                            std::move(args));
 }
 
 SIRNodeId JLLoweringVisitor::visit_IfExpr(IfExpr& if_expr) {
-    SIRNodeId lo_cond  = visit_and_check(if_expr.condition);
-    SIRNodeId lo_true  = visit_and_check(if_expr.true_branch);
+    SIRNodeId lo_cond = visit_and_check(if_expr.condition);
+
+    SIRNodeId lo_true =
+        emplace_node<sir::ScopedStmt>(if_expr.location, visit_and_check(if_expr.true_branch));
+
     SIRNodeId lo_false = visit_and_check(if_expr.false_branch);
+    if (!lo_false.is_null())
+        lo_false = emplace_node<sir::ScopedStmt>(if_expr.location, lo_false);
 
     return emplace_node<sir::IfStmt>(if_expr.location, lo_cond, lo_true, lo_false);
 }

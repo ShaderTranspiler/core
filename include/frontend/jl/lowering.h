@@ -5,12 +5,15 @@
 
 namespace stc::jl {
 
-class JLLoweringVisitor final : public JLVisitor<JLLoweringVisitor, const JLCtx, sir::NodeId> {
+class JLLoweringVisitor final : public JLVisitor<JLLoweringVisitor, JLCtx, sir::NodeId> {
     using SIRNodeId = sir::NodeId;
 
 public:
-    explicit JLLoweringVisitor(const JLCtx& ctx)
-        : JLVisitor{ctx}, sir_ctx{} {}
+    explicit JLLoweringVisitor(JLCtx&& ctx)
+        : JLVisitor{ctx}, sir_ctx{sir::SIRCtx::move_pools_from(std::move(ctx))} {
+        // sir_ctx.src_info_pool = std::move(ctx.src_info_pool);
+        // sir_ctx.type_pool     = std::move(ctx.type_pool);
+    }
 
     SIRNodeId visit_default_case();
 
@@ -20,13 +23,23 @@ public:
     #undef X
     // clang-format on
 
-private:
+    // CLEANUP
+    /*
+    sir::SIRCtx&& steal_ctx() {
+        sir_ctx.src_info_pool = std::move(ctx.src_info_pool);
+        return std::move(sir_ctx);
+    }
+    */
+
+    bool successful() const { return success; }
     sir::SIRCtx sir_ctx;
+
+private:
     bool success = true;
 
     template <typename T, typename... Args>
     SIRNodeId emplace_node(Args&&... args) {
-        return sir_ctx.emplace_node<T>(std::forward<Args>(args)...).first;
+        return sir_ctx.template emplace_node<T>(std::forward<Args>(args)...).first;
     }
 
     SIRNodeId fail(std::string_view msg);

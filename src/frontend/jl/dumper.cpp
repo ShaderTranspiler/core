@@ -18,9 +18,40 @@ void JLDumper::dec_indent(size_t level) {
     indent_level -= level;
 }
 
+// CLEANUP: separate core logic of pre_visits into helper
+
 void JLDumper::pre_visit_id(NodeId node_id) {
-    out << indent() << '[' << std::format("{:p}", static_cast<void*>(ctx.get_node(node_id))) << "|"
-        << node_id << "]\n";
+    Expr* node = ctx.get_node(node_id);
+
+    out << indent() << '[' << std::format("{:p}", static_cast<void*>(node)) << "|"
+        << std::to_string(node_id) << '|'
+        << (node != nullptr ? std::to_string(static_cast<uint8_t>(node->kind())) : "?") << "]\n";
+
+    if (node != nullptr)
+        out << indent() << '<' << type_str(node->type) << '|' << std::to_string(node->type)
+            << ">\n";
+    else
+        out << indent() << "<?|?>\n";
+}
+
+void JLDumper::pre_visit_ptr(Expr* expr) {
+    out << indent() << '[' << std::format("{:p}", static_cast<void*>(expr)) << "|_|"
+        << (expr != nullptr ? std::to_string(static_cast<uint8_t>(expr->kind())) : "?") << "]\n";
+
+    if (expr != nullptr)
+        out << indent() << '<' << type_str(expr->type) << '|' << std::to_string(expr->type)
+            << ">\n";
+    else
+        out << indent() << "<?|?>\n";
+}
+
+void JLDumper::visit_CompoundExpr(CompoundExpr& cmpd) {
+    out << indent() << "CompoundExpr:\n";
+
+    inc_indent();
+    for (NodeId expr : cmpd.body)
+        visit(expr);
+    dec_indent();
 }
 
 void JLDumper::visit_BoolLiteral(BoolLiteral& bool_lit) {
@@ -36,7 +67,7 @@ void JLDumper::visit_BoolLiteral(BoolLiteral& bool_lit) {
 #define GEN_UINT_LITERAL_VISITOR(type, width)                                                      \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                               \
     void JLDumper::visit_##type(type& lit) {                                                       \
-        out << indent() << #type << ": 0x" << std::format("{:#0" #width "x}", lit.value) << '\n';  \
+        out << indent() << #type << ": " << std::format("{:#0" #width "x}", lit.value) << '\n';    \
     }
 
 GEN_LITERAL_VISITOR(Int32Literal, )
@@ -62,9 +93,13 @@ void JLDumper::visit_StringLiteral(StringLiteral& lit) {
     dec_indent();
 }
 
-// CLEANUP: pretty printing target_fn isa Symbol case
+void JLDumper::visit_SymbolLiteral(SymbolLiteral& lit) {
+    out << indent() << "SymbolLiteral: :(" << lit.value << ")\n";
+}
+
+// CLEANUP: pretty printing for target_fn isa Symbol case
 void JLDumper::visit_FunctionCall(FunctionCall& fn_call) {
-    out << indent() << "FunctionCall";
+    out << indent() << "FunctionCall:\n";
 
     out << indent() << dump_label("target_fn");
     inc_indent();

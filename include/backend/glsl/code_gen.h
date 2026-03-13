@@ -2,20 +2,25 @@
 
 #include <sstream>
 
-#include "backend/glsl/glsl_context.h"
+#include "backend/glsl/context.h"
 #include "sir/visitor.h"
 
 namespace stc::glsl {
 
 using namespace stc::sir;
 
-class GLSLCodeGenVisitor final : public SIRVisitor<GLSLCodeGenVisitor, const GLSLCtx, void> {
-public:
-    GLSLCodeGenVisitor(const GLSLCtx& ctx)
-        : SIRVisitor{ctx} {}
+class GLSLCodeGenVisitor final : public SIRVisitor<GLSLCodeGenVisitor, GLSLCtx, void> {
+    using Base = SIRVisitor<GLSLCodeGenVisitor, GLSLCtx, void>;
 
-    std::string result() const { return out.str(); }
-    bool success() const { return successful_gen; }
+public:
+    explicit GLSLCodeGenVisitor(GLSLCtx& ctx)
+        : SIRVisitor<GLSLCodeGenVisitor, GLSLCtx, void>{ctx} {}
+
+    std::string result() {
+        out.flush();
+        return out.str();
+    }
+    bool successful() const { return successful_gen; }
 
     // clang-format off
     #define X(type, kind) STC_AST_VISITOR_DECL(void, type)

@@ -31,7 +31,10 @@ int main() { // NOLINT
     auto ret_cmpd   = ctx.emplace_node<CompoundStmt>(loc, std::vector<NodeId>{ret}).first;
     auto empty_cmpd = ctx.emplace_node<CompoundStmt>(loc, std::vector<NodeId>{}).first;
 
-    auto if_stmt = ctx.emplace_node<IfStmt>(loc, true_lit, ret_cmpd, empty_cmpd).first;
+    auto scoped1 = ctx.emplace_node<ScopedStmt>(loc, ret_cmpd).first;
+    auto scoped2 = ctx.emplace_node<ScopedStmt>(loc, empty_cmpd).first;
+
+    auto if_stmt = ctx.emplace_node<IfStmt>(loc, true_lit, scoped1, scoped2).first;
 
     auto cmpd = ctx.emplace_node<CompoundStmt>(loc, std::vector<NodeId>{if_stmt, binop2}).first;
 
@@ -49,7 +52,7 @@ int main() { // NOLINT
 
     std::cout << codegen.result();
 
-    std::cout << "code gen " << (codegen.success() ? "was successful" : "failed") << '\n';
+    std::cout << "code gen " << (codegen.successful() ? "was successful" : "failed") << '\n';
 
     return 0;
 }

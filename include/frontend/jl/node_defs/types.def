@@ -1,0 +1,18 @@
+#include "common/x_macros/begin_def.inc"
+
+STC_X_FIRST(jl_Bool_t)
+STC_X(jl_Int32_t)
+STC_X(jl_Int64_t)
+STC_X(jl_UInt8_t)
+STC_X(jl_UInt16_t)
+STC_X(jl_UInt32_t)
+STC_X(jl_UInt64_t)
+STC_X(jl_UInt128_t)
+STC_X(jl_Float16_t)
+STC_X(jl_Float32_t)
+STC_X(jl_Float64_t)
+STC_X(jl_Nothing_t)
+STC_X(jl_String_t)
+STC_X_LAST(jl_Symbol_t)
+
+#include "common/x_macros/end_def.inc"

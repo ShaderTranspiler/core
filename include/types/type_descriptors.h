@@ -28,7 +28,6 @@ struct TypeId : public StrongId<uint16_t> {
 
     static constexpr TypeId null_id() { return 0U; }
     static constexpr TypeId void_id() { return 1U; }
-    static constexpr TypeId bool_id() { return 2U; }
 };
 
 struct VoidTD {
@@ -127,7 +126,7 @@ struct BuiltinTD {
         : kind{kind} {}
 
     template <CEnumOf<uint8_t> T>
-    constexpr explicit BuiltinTD(T kind)
+    constexpr BuiltinTD(T kind)
         : kind{static_cast<uint8_t>(kind)} {}
 
     bool operator==(const BuiltinTD& other) const { return kind == other.kind; }
@@ -135,6 +134,8 @@ struct BuiltinTD {
 
 using TDVariantType =
     std::variant<VoidTD, BoolTD, IntTD, FloatTD, VectorTD, MatrixTD, ArrayTD, StructTD, BuiltinTD>;
+
+static_assert(std::is_copy_constructible_v<TDVariantType>);
 
 // CLEANUP: use a variadic template instead
 template <typename T>
@@ -144,16 +145,16 @@ concept CTypeDescriptorTy =
     std::is_same_v<T, ArrayTD> || std::is_same_v<T, StructTD> || std::is_same_v<T, BuiltinTD>;
 
 struct TypeDescriptor {
-    const TDVariantType type_data;
+    TypeDescriptor(const TypeDescriptor&)                      = delete;
+    TypeDescriptor& operator=(const TypeDescriptor& other)     = delete;
+    TypeDescriptor(TypeDescriptor&&) noexcept                  = default;
+    TypeDescriptor& operator=(TypeDescriptor&& other) noexcept = delete;
 
-    TypeDescriptor(const TypeDescriptor&)                  = delete;
-    TypeDescriptor(TypeDescriptor&&)                       = default;
-    TypeDescriptor& operator=(const TypeDescriptor& other) = delete;
-    TypeDescriptor& operator=(TypeDescriptor&&)            = delete;
+    TDVariantType type_data() const { return _type_data; }
 
     template <CTypeDescriptorTy T>
     constexpr bool is() const {
-        return std::holds_alternative<T>(type_data);
+        return std::holds_alternative<T>(_type_data);
     }
 
     constexpr bool is_void() const { return is<VoidTD>(); }
@@ -167,7 +168,7 @@ struct TypeDescriptor {
     template <CTypeDescriptorTy T>
     constexpr const T& as() const {
         assert(is<T>() && "invalid cast from TypeDescriptor to a CTypeDescriptorTy");
-        return std::get<T>(type_data);
+        return std::get<T>(_type_data);
     }
 
     bool operator==(const TypeDescriptor&) const;
@@ -175,8 +176,10 @@ struct TypeDescriptor {
 private:
     friend class TypePool;
 
+    TDVariantType _type_data;
+
     explicit TypeDescriptor(TDVariantType type_data)
-        : type_data{std::move(type_data)} {}
+        : _type_data{std::move(type_data)} {}
 };
 static_assert(sizeof(TypeDescriptor) == sizeof(TDVariantType));
 

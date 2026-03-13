@@ -12,6 +12,7 @@ public:
         : JLVisitor{ctx}, out{out} {}
 
     void pre_visit_id(NodeId node);
+    void pre_visit_ptr(Expr* expr);
 
     // clang-format off
     #define X(type, kind) STC_AST_VISITOR_DECL(void, type)

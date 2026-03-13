@@ -223,6 +223,8 @@ void GLSLCodeGenVisitor::visit_FunctionCall(FunctionCall& fn_call) {
         if (i != fn_call.args.size() - 1)
             out << ", ";
     }
+
+    out << ')';
 }
 
 void GLSLCodeGenVisitor::visit_DeclRefExpr(DeclRefExpr& decl_ref) {
@@ -250,8 +252,12 @@ void GLSLCodeGenVisitor::visit_ScopedStmt(ScopedStmt& scoped_stmt) {
 }
 
 void GLSLCodeGenVisitor::visit_CompoundStmt(CompoundStmt& cmpd_stmt) {
-    for (NodeId node : cmpd_stmt.body)
+    for (NodeId node : cmpd_stmt.body) {
         visit(node);
+
+        if (ctx.isa<Expr>(node))
+            out << ";\n";
+    }
 }
 
 void GLSLCodeGenVisitor::visit_IfStmt(IfStmt& if_stmt) {
@@ -259,8 +265,8 @@ void GLSLCodeGenVisitor::visit_IfStmt(IfStmt& if_stmt) {
     visit(if_stmt.condition_expr);
     out << ")\n";
 
-    assert(ctx.isa<CompoundStmt>(if_stmt.true_block) &&
-           (if_stmt.false_block.is_null() || ctx.isa<CompoundStmt>(if_stmt.false_block)) &&
+    assert(ctx.isa<ScopedStmt>(if_stmt.true_block) &&
+           (if_stmt.false_block.is_null() || ctx.isa<ScopedStmt>(if_stmt.false_block)) &&
            "invalid if child not caught by sema");
 
     visit(if_stmt.true_block);

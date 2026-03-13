@@ -19,7 +19,7 @@ inline std::string type_prefix(const TypeDescriptor& td) {
     if (td.is<FloatTD>())
         return td.as<FloatTD>().width == 32 ? "f" : "d";
 
-    return "???";
+    return "?";
 }
 
 std::string type_str(const TypeDescriptor& td, const TypePool& pool);

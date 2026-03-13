@@ -2,7 +2,6 @@
 
 #include "common/src_info.h"
 #include "common/utils.h"
-#include "frontend/jl/context.h"
 #include "types/types.h"
 
 #define SAME_NODE_T_DEF(Kind)                                                                      \
@@ -12,9 +11,15 @@
 
 namespace stc::jl {
 
-using namespace stc::types;
+struct NodeId : StrongId<uint32_t> {
+    using StrongId::StrongId;
 
-using CtxRef = JLCtx&;
+    bool is_null() const { return *this == null_id(); }
+
+    static constexpr NodeId null_id() { return 0U; }
+};
+
+using namespace stc::types;
 
 // clang-format off
 enum class NodeKind : uint8_t {
@@ -69,9 +74,21 @@ struct Stmt : public Expr {
     }
 };
 
+struct CompoundExpr : public Expr {
+    std::vector<NodeId> body;
+
+    explicit CompoundExpr(SrcLocationId location, std::vector<NodeId> body)
+        : Expr{location, NodeKind::Compound}, body{std::move(body)} {}
+
+    explicit CompoundExpr(SrcLocationId location, std::initializer_list<NodeId> nodes)
+        : CompoundExpr{location, std::vector<NodeId>{nodes}} {}
+
+    SAME_NODE_T_DEF(NodeKind::Compound)
+};
+
 struct BoolLiteral : public Expr {
     explicit BoolLiteral(SrcLocationId location, bool value)
-        : Expr{location, NodeKind::BoolLit, TypeId::bool_id(), static_cast<uint8_t>(value)} {}
+        : Expr{location, NodeKind::BoolLit, static_cast<uint8_t>(value)} {}
 
     bool value() const { return static_cast<bool>(node_storage()); }
 
@@ -80,31 +97,31 @@ struct BoolLiteral : public Expr {
 
 namespace detail {
 
-template <NodeKind Kind, typename T, uint32_t Width, bool IsSigned>
+template <NodeKind Kind, typename T>
 requires std::integral<T>
 struct IntLiteral : public Expr {
     T value;
 
-    explicit IntLiteral(SrcLocationId location, T value, CtxRef ctx)
-        : Expr{location, Kind, ctx.type_pool.int_td(Width, IsSigned)}, value{value} {}
+    explicit IntLiteral(SrcLocationId location, T value)
+        : Expr{location, Kind}, value{value} {}
 
     SAME_NODE_T_DEF(Kind)
 };
 
 } // namespace detail
 
-using Int32Literal  = detail::IntLiteral<NodeKind::I32Lit, int32_t, 32, true>;
-using Int64Literal  = detail::IntLiteral<NodeKind::I64Lit, int64_t, 64, true>;
-using UInt8Literal  = detail::IntLiteral<NodeKind::U8Lit, uint8_t, 8, false>;
-using UInt16Literal = detail::IntLiteral<NodeKind::U16Lit, uint16_t, 16, false>;
-using UInt32Literal = detail::IntLiteral<NodeKind::U32Lit, uint32_t, 32, false>;
-using UInt64Literal = detail::IntLiteral<NodeKind::U64Lit, uint64_t, 64, false>;
+using Int32Literal  = detail::IntLiteral<NodeKind::I32Lit, int32_t>;
+using Int64Literal  = detail::IntLiteral<NodeKind::I64Lit, int64_t>;
+using UInt8Literal  = detail::IntLiteral<NodeKind::U8Lit, uint8_t>;
+using UInt16Literal = detail::IntLiteral<NodeKind::U16Lit, uint16_t>;
+using UInt32Literal = detail::IntLiteral<NodeKind::U32Lit, uint32_t>;
+using UInt64Literal = detail::IntLiteral<NodeKind::U64Lit, uint64_t>;
 
 struct UInt128Literal : public Expr {
     uint64_t high, low;
 
-    explicit UInt128Literal(SrcLocationId location, uint64_t high, uint64_t low, CtxRef ctx)
-        : Expr{location, NodeKind::U128Lit, ctx.jl_UInt128_t}, high{high}, low{low} {}
+    explicit UInt128Literal(SrcLocationId location, uint64_t high, uint64_t low)
+        : Expr{location, NodeKind::U128Lit}, high{high}, low{low} {}
 
     SAME_NODE_T_DEF(NodeKind::U128Lit)
 };
@@ -112,8 +129,8 @@ struct UInt128Literal : public Expr {
 struct Float32Literal : public Expr {
     float value;
 
-    explicit Float32Literal(SrcLocationId location, float value, CtxRef ctx)
-        : Expr{location, NodeKind::F32Lit, ctx.jl_Float32_t}, value{value} {}
+    explicit Float32Literal(SrcLocationId location, float value)
+        : Expr{location, NodeKind::F32Lit}, value{value} {}
 
     SAME_NODE_T_DEF(NodeKind::F32Lit)
 };
@@ -121,8 +138,8 @@ struct Float32Literal : public Expr {
 struct Float64Literal : public Expr {
     double value;
 
-    explicit Float64Literal(SrcLocationId location, double value, CtxRef ctx)
-        : Expr{location, NodeKind::F64Lit, ctx.jl_Float64_t}, value{value} {}
+    explicit Float64Literal(SrcLocationId location, double value)
+        : Expr{location, NodeKind::F64Lit}, value{value} {}
 
     SAME_NODE_T_DEF(NodeKind::F64Lit)
 };
@@ -130,10 +147,19 @@ struct Float64Literal : public Expr {
 struct StringLiteral : public Expr {
     std::string value;
 
-    explicit StringLiteral(SrcLocationId location, std::string value, CtxRef ctx)
-        : Expr{location, NodeKind::StrLit, ctx.jl_String_t}, value{std::move(value)} {}
+    explicit StringLiteral(SrcLocationId location, std::string value)
+        : Expr{location, NodeKind::StrLit}, value{std::move(value)} {}
 
     SAME_NODE_T_DEF(NodeKind::StrLit)
+};
+
+struct SymbolLiteral : public Expr {
+    std::string value;
+
+    explicit SymbolLiteral(SrcLocationId location, std::string value)
+        : Expr{location, NodeKind::SymLit}, value{std::move(value)} {}
+
+    SAME_NODE_T_DEF(NodeKind::SymLit)
 };
 
 struct FunctionCall : public Expr {
@@ -142,6 +168,10 @@ struct FunctionCall : public Expr {
 
     explicit FunctionCall(SrcLocationId location, NodeId target_fn, std::vector<NodeId> args)
         : Expr{location, NodeKind::FnCall}, target_fn{target_fn}, args{std::move(args)} {}
+
+    explicit FunctionCall(SrcLocationId location, NodeId target_fn,
+                          std::initializer_list<NodeId> args)
+        : FunctionCall{location, target_fn, std::vector<NodeId>{args}} {}
 
     SAME_NODE_T_DEF(NodeKind::FnCall)
 };

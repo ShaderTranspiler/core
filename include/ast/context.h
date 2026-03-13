@@ -15,54 +15,67 @@ namespace stc {
 // NodeIdTy is the size type used to store arena indices/offsets when referring to nodes
 // NodeBaseTy is the base class from which all AST types are derived
 // NodeKindTy is the kind (enum) type used to uniquely identify different node types
+// Derived should be provided by classes deriving from this, so that partial movability can be
+// ensured automatically at compile-time through concepts
 
-template <CStrongId NodeIdTy, typename NodeBaseTy, typename NodeKindTy>
-requires requires {
-    { NodeIdTy::null_id() } -> std::convertible_to<NodeIdTy>;
-}
-struct ASTCtx {
+template <CNullableStrongId NodeIdTy, typename NodeBaseTy, typename NodeKindTy>
+class ASTCtx {
+public:
     using node_id_type   = NodeIdTy;
     using node_base_type = NodeBaseTy;
     using node_kind_type = NodeKindTy;
 
 protected:
     BumpArena<typename NodeIdTy::id_type> node_arena;
-    BumpArena<SrcLocationId::id_type> src_info_arena;
-    BumpArena<types::TypeId::id_type> type_arena;
 
 public:
     types::TypePool type_pool;
-    SrcInfoManager src_info_manager;
+    SrcInfoPool src_info_pool;
 
     explicit ASTCtx(std::vector<types::BuiltinTD> type_builtins = {},
-                    NodeIdTy::id_type node_arena_kb             = 128,
-                    SrcLocationId::id_type src_info_arena_kb    = 128,
-                    types::TypeId::id_type type_arena_kb        = 32)
-        : node_arena{node_arena_kb},
-          src_info_arena{src_info_arena_kb},
-          type_arena{type_arena_kb},
-          type_pool{type_arena, std::move(type_builtins)},
-          src_info_manager{src_info_arena} {}
+                    NodeIdTy::id_type node_arena_kb             = 128U,
+                    SrcLocationId::id_type src_info_arena_kb    = 128U,
+                    types::TypeId::id_type type_arena_kb        = 32U)
+        : node_arena{node_arena_kb * 1024U},
+          type_pool{static_cast<types::TypeId::id_type>(type_arena_kb * 1024U),
+                    std::move(type_builtins)},
+          src_info_pool{src_info_arena_kb * 1024U} {}
 
-    // CLEANUP: enable move semantics (requires BumpArena support), share ASTCtx between passes
     ASTCtx(const ASTCtx&)                  = delete;
-    ASTCtx(ASTCtx&&)                       = delete;
     ASTCtx& operator=(const ASTCtx&) const = delete;
-    ASTCtx& operator=(ASTCtx&&) const      = delete;
+    ASTCtx(ASTCtx&&) noexcept              = default;
+    ASTCtx& operator=(ASTCtx&&) noexcept   = default;
+
+protected:
+    // "partial" move ctor, moving the type and src info pools, and empty initializing node arena
+    // protected to allow derived classes to use as a starting point, but publicly only accessible
+    // from the factory function move_pools_from
+    template <typename T, typename U, typename V>
+    explicit ASTCtx(ASTCtx<T, U, V>&& other, NodeIdTy::id_type node_arena_kb)
+        : node_arena{node_arena_kb * 1024U},
+          type_pool{std::move(other.type_pool)},
+          src_info_pool{std::move(other.src_info_pool)} {}
+
+public:
+    template <typename T, typename U, typename V>
+    [[nodiscard]] static ASTCtx move_pools_from(ASTCtx<T, U, V>&& other,
+                                                NodeIdTy::id_type node_arena_kb = 128U) {
+        return ASTCtx{std::move(other), node_arena_kb};
+    }
 
     template <typename T, typename... Args>
     requires std::derived_from<T, NodeBaseTy>
-    std::pair<NodeIdTy, T*> emplace_node(Args&&... args) {
+    [[nodiscard]] std::pair<NodeIdTy, T*> emplace_node(Args&&... args) {
         return node_arena.template emplace<T>(std::forward<Args>(args)...);
     }
 
-    inline NodeBaseTy* get_node(NodeIdTy id) const {
+    [[nodiscard]] inline NodeBaseTy* get_node(NodeIdTy id) const {
         return static_cast<NodeBaseTy*>(node_arena.get_ptr(id));
     }
 
     template <typename T>
     requires CDynCastable<T, NodeBaseTy>
-    inline T* get_dyn(NodeIdTy id) const {
+    [[nodiscard]] inline T* get_dyn(NodeIdTy id) const {
         return dyn_cast<T>(get_node(id));
     }
 
@@ -73,13 +86,13 @@ public:
         if (id == NodeIdTy::null_id())
             return false;
 
-        NodeBaseTy* node = get_dyn<T>(id);
+        T* node = get_dyn<T>(id);
 
-        return dyn_cast<T>(node) != nullptr;
+        return node != nullptr;
     }
 
     operator const types::TypePool&() const { return type_pool; }
-    operator const SrcInfoManager&() const { return src_info_manager; }
+    operator const SrcInfoPool&() const { return src_info_pool; }
 };
 
 }; // namespace stc

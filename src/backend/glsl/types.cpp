@@ -69,7 +69,7 @@ std::string type_str(const TypeDescriptor& td, const TypePool& type_pool) {
     }
 
     assert(false && "missing type case in glsl code gen's type_str");
-    return "???";
+    return "?";
 }
 
 } // namespace stc::glsl

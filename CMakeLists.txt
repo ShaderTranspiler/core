@@ -137,7 +137,8 @@ add_library(CommonConfig INTERFACE)
 
 # extra safety options
 if (MSVC)
-    target_compile_options(CommonConfig INTERFACE /W4)
+    # /Zc:preprocessor (standard-conforming preprocessor) needed for X-macro system (__VA_ARGS__ expansion)
+    target_compile_options(CommonConfig INTERFACE /W4 /Zc:preprocessor)
 else()
     target_compile_options(CommonConfig INTERFACE
         -Wall -Wextra -Wpedantic -Wconversion -Wreorder
@@ -318,13 +319,21 @@ if (Doxygen_FOUND)
             set(MAKE_CMD "make")
         endif()
 
-        add_custom_command(TARGET docs POST_BUILD
+        doxygen_add_docs(
+            docs_pdf
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            COMMENT "Generating HTML and LaTeX docs with doxygen..."
+        )
+
+        add_custom_command(TARGET docs_pdf POST_BUILD
             COMMAND ${MAKE_CMD}
             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs/latex"
             COMMENT "Compiling LaTeX docs to PDF..."
             VERBATIM
         )
-        message(STATUS "pdflatex found, automatic LaTeX -> PDF docs generation enabled for docs target")
+
+        message(STATUS "pdflatex found, automatic LaTeX -> PDF docs generation enabled for docs_pdf target")
     else()
         message(WARNING "pdflatex could not be located, PDF generation from LaTeX docs won't be possible.")
     endif()
@@ -334,10 +343,10 @@ endif()
 
 # sandbox targets
 # for trying out and playing around with the library
-# cpp files prefixed with run_ are treated as separate targets
+# cpp files prefixed with sb_ are treated as separate targets
 # other cpp files can be used for includes and such
 
-file(GLOB SANDBOX_SOURCES "sandbox/run_*.cpp")
+file(GLOB SANDBOX_SOURCES "sandbox/sb_*.cpp")
 
 foreach (SBOX_FILE ${SANDBOX_SOURCES})
     get_filename_component(FNAME ${SBOX_FILE} NAME_WE)

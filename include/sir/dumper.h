@@ -6,9 +6,9 @@
 
 namespace stc::sir {
 
-class SIRDumper final : public SIRVisitor<SIRDumper, const SIRCtx, void> {
+class SIRDumper final : public SIRVisitor<SIRDumper, SIRCtx, void> {
 public:
-    explicit SIRDumper(const SIRCtx& ctx, std::ostream& out)
+    explicit SIRDumper(SIRCtx& ctx, std::ostream& out)
         : SIRVisitor{ctx}, out{out} {}
 
     void pre_visit_id(NodeId node);

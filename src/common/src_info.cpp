@@ -33,8 +33,9 @@ std::nullptr_t warning(const SrcFile& file, SrcLocation location, std::string_vi
     return warning(msg, out);
 }
 
-SrcInfoManager::SrcInfoManager(ArenaTy& arena, size_t initial_file_capacity)
-    : arena_alloc{&arena},
+SrcInfoPool::SrcInfoPool(SizeTy initial_location_capacity, size_t initial_file_capacity)
+    : arena{initial_location_capacity},
+      arena_alloc{&arena},
       file_bounds{},
       invalid_location_id{arena_alloc.emplace(SrcLocation::invalid()).first},
       last_loc_id{invalid_location_id} {
@@ -44,11 +45,10 @@ SrcInfoManager::SrcInfoManager(ArenaTy& arena, size_t initial_file_capacity)
     std::ignore = make_file("SRC FILE INFO UNAVAILABLE");
 }
 
-SrcLocationId SrcInfoManager::make_location(uint32_t line, uint32_t col) {
+SrcLocationId SrcInfoPool::make_location(uint32_t line, uint32_t col) {
     if (!arena_alloc.can_allocate()) {
-        warning(
-            "Invalid source location information returned from SrcInfoManager, line/col numbers "
-            "printed after this might not be accurate. The processed file might be too large.");
+        warning("Invalid source location information returned from SrcInfoPool, line/col numbers "
+                "printed after this might not be accurate. The processed file might be too large.");
 
         return invalid_location_id;
     }
@@ -58,14 +58,13 @@ SrcLocationId SrcInfoManager::make_location(uint32_t line, uint32_t col) {
     return id;
 }
 
-uint64_t SrcInfoManager::make_file(std::string path) {
+uint64_t SrcInfoPool::make_file(std::string path) {
     file_bounds.emplace_back(last_loc_id, SrcFile{std::move(path)});
 
     return file_bounds.size() - 1;
 }
 
-const SrcFile& SrcInfoManager::get_file_for_location(SrcLocationId loc_id) const {
-    // the below loop relies on these invariants
+const SrcFile& SrcInfoPool::get_file_for_location(SrcLocationId loc_id) const {
     assert(!file_bounds.empty() &&
            "File pool was empty, its size should be at least 1 (the invalid src file at idx 0)");
 
