@@ -31,15 +31,18 @@ protected:
 public:
     types::TypePool type_pool;
     SrcInfoPool src_info_pool;
+    SymbolPool sym_pool;
 
     explicit ASTCtx(std::vector<types::BuiltinTD> type_builtins = {},
                     NodeIdTy::id_type node_arena_kb             = 128U,
                     SrcLocationId::id_type src_info_arena_kb    = 128U,
-                    types::TypeId::id_type type_arena_kb        = 32U)
+                    types::TypeId::id_type type_arena_kb        = 32U,
+                    SymbolId::id_type sym_arena_kb              = 64U)
         : node_arena{node_arena_kb * 1024U},
           type_pool{static_cast<types::TypeId::id_type>(type_arena_kb * 1024U),
                     std::move(type_builtins)},
-          src_info_pool{src_info_arena_kb * 1024U} {}
+          src_info_pool{src_info_arena_kb * 1024U},
+          sym_pool{sym_arena_kb * 1024U} {}
 
     ASTCtx(const ASTCtx&)                  = delete;
     ASTCtx& operator=(const ASTCtx&) const = delete;
@@ -54,7 +57,8 @@ protected:
     explicit ASTCtx(ASTCtx<T, U, V>&& other, NodeIdTy::id_type node_arena_kb)
         : node_arena{node_arena_kb * 1024U},
           type_pool{std::move(other.type_pool)},
-          src_info_pool{std::move(other.src_info_pool)} {}
+          src_info_pool{std::move(other.src_info_pool)},
+          sym_pool{std::move(other.sym_pool)} {}
 
 public:
     template <typename T, typename U, typename V>
@@ -69,13 +73,13 @@ public:
         return node_arena.template emplace<T>(std::forward<Args>(args)...);
     }
 
-    [[nodiscard]] inline NodeBaseTy* get_node(NodeIdTy id) const {
+    [[nodiscard]] NodeBaseTy* get_node(NodeIdTy id) const {
         return static_cast<NodeBaseTy*>(node_arena.get_ptr(id));
     }
 
     template <typename T>
     requires CDynCastable<T, NodeBaseTy>
-    [[nodiscard]] inline T* get_dyn(NodeIdTy id) const {
+    [[nodiscard]] T* get_dyn(NodeIdTy id) const {
         return dyn_cast<T>(get_node(id));
     }
 
@@ -91,8 +95,18 @@ public:
         return node != nullptr;
     }
 
+    [[nodiscard]] std::string_view get_sym(SymbolId sym_id) const {
+        auto result = sym_pool.get_symbol_maybe(sym_id);
+
+        if (!result.has_value())
+            throw std::logic_error{"symbol id not found in current context state"};
+
+        return *result;
+    }
+
     operator const types::TypePool&() const { return type_pool; }
     operator const SrcInfoPool&() const { return src_info_pool; }
+    operator const SymbolPool&() const { return sym_pool; }
 };
 
 }; // namespace stc

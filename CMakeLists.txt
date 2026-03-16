@@ -71,7 +71,7 @@ if (NOT NO_CCACHE)
 
         message(STATUS "ccache found and enabled for compiler caching")
     else()
-        message(WARNING "ccache not found, compiler caching won't be possible")
+        message(STATUS "ccache not found, compiler caching won't be possible")
     endif()
 else()
     message(STATUS "ccache disabled explicitly")
@@ -104,7 +104,7 @@ if (CLANG_FORMAT_EXEC)
 
     message(STATUS "clang-format found, check_format and fix_format targets enabled. Using ${CLANG_FORMAT_EXEC}")
 else()
-    message(WARNING "clang-format could not be located, code style checking won't be possible.")
+    message(STATUS "clang-format could not be located, code style checking won't be possible.")
 endif()
 
 # clang-tidy
@@ -127,7 +127,7 @@ if (NOT NO_TIDY)
 
         message(STATUS "clang-tidy found and enabled. Using ${CLANG_TIDY_EXEC}")
     else()
-        message(WARNING "clang-tidy could not be located, static analysis won't be possible.")
+        message(STATUS "clang-tidy could not be located, static analysis won't be possible.")
     endif()
 else()
     message(STATUS "clang-tidy disabled explicitly")
@@ -335,10 +335,10 @@ if (Doxygen_FOUND)
 
         message(STATUS "pdflatex found, automatic LaTeX -> PDF docs generation enabled for docs_pdf target")
     else()
-        message(WARNING "pdflatex could not be located, PDF generation from LaTeX docs won't be possible.")
+        message(STATUS "pdflatex could not be located, PDF generation from LaTeX docs won't be possible.")
     endif()
 else()
-    message(WARNING "doxygen or graphviz could not be located, docs generation won't be possible.")
+    message(STATUS "doxygen or graphviz could not be located, docs generation won't be possible.")
 endif()
 
 # sandbox targets

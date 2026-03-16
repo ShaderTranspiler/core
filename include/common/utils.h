@@ -28,7 +28,7 @@ using unqual_return_t = std::remove_cvref_t<std::invoke_result_t<F, T>>;
 
 template <typename T>
 concept CHashable = requires (T a) {
-    { std::hash<T>{}(a) } noexcept -> std::same_as<size_t>;
+    { std::hash<T>{}(a) } -> std::same_as<size_t>;
 };
 
 template <typename T>
@@ -102,6 +102,7 @@ constexpr size_t hash_combine(size_t seed, const T& v) {
 
 // named after strong typedefs (pattern has been slightly tweaked/extended)
 template <std::unsigned_integral IdTy>
+requires CHashable<IdTy>
 struct StrongId {
     using id_type = IdTy;
 
@@ -125,8 +126,9 @@ struct StrongId {
 };
 
 template <typename T>
-concept CStrongId =
-    requires { typename T::id_type; } && std::derived_from<T, StrongId<typename T::id_type>>;
+concept CStrongId = requires {
+    typename T::id_type;
+} && std::derived_from<T, StrongId<typename T::id_type>> && CHashable<typename T::id_type>;
 
 template <typename T>
 concept CNullableStrongId = CStrongId<T> && requires {
@@ -145,3 +147,11 @@ constexpr bool no_nullptrs(Args*... args) {
 }
 
 } // namespace stc
+
+// hash impl for all id types derived from StrongId that "forwards" to the underlying value type
+template <stc::CStrongId T>
+struct std::hash<T> {
+    size_t operator()(const T& id) const noexcept {
+        return std::hash<typename T::id_type>{}(id.value);
+    }
+};

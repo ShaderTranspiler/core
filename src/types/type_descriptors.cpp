@@ -1,6 +1,7 @@
 #include <cassert>
 #include <format>
 
+#include "ast/context.h"
 #include "types/type_descriptors.h"
 #include "types/type_pool.h"
 
@@ -73,8 +74,9 @@ bool TypeDescriptor::operator==(const TypeDescriptor& other) const {
     return _type_data.index() == other._type_data.index() && _type_data == other._type_data;
 }
 
-std::string to_string(const TypeDescriptor& type, const TypePool& type_pool) {
-    auto visitor = [&type_pool](auto&& arg) -> std::string {
+std::string to_string(const TypeDescriptor& type, const TypePool& type_pool,
+                      const SymbolPool& sym_pool) {
+    auto visitor = [&type_pool, &sym_pool](auto&& arg) -> std::string {
         using T = std::decay_t<decltype(arg)>;
 
         if constexpr (std::is_same_v<T, VoidTD>) {
@@ -89,20 +91,22 @@ std::string to_string(const TypeDescriptor& type, const TypePool& type_pool) {
                                    ? ""
                                    : std::format(" ({})", ::to_string(arg.enc)));
         } else if constexpr (std::is_same_v<T, VectorTD>) {
-            return std::format("vec{}<{}>", arg.component_count,
-                               to_string(type_pool.get_td(arg.component_type_id), type_pool));
+            return std::format(
+                "vec{}<{}>", arg.component_count,
+                to_string(type_pool.get_td(arg.component_type_id), type_pool, sym_pool));
         } else if constexpr (std::is_same_v<T, MatrixTD>) {
-            return std::format("matrix ({}x {})", arg.column_count,
-                               to_string(type_pool.get_td(arg.column_type_id), type_pool));
+            return std::format(
+                "matrix ({}x {})", arg.column_count,
+                to_string(type_pool.get_td(arg.column_type_id), type_pool, sym_pool));
         } else if constexpr (std::is_same_v<T, ArrayTD>) {
             const TypeDescriptor& el_type = type_pool.get_td(arg.element_type_id);
             return std::format("array[{}] of {}", arg.length,
                                std::holds_alternative<ArrayTD>(el_type.type_data())
-                                   ? std::format("({})", to_string(el_type, type_pool))
-                                   : to_string(el_type, type_pool));
+                                   ? std::format("({})", to_string(el_type, type_pool, sym_pool))
+                                   : to_string(el_type, type_pool, sym_pool));
         } else if constexpr (std::is_same_v<T, StructTD>) {
             // TODO: list of fields
-            return std::format("struct {}", arg.data->name);
+            return std::format("struct {}", sym_pool.get_symbol(arg.data->name));
         } else if constexpr (std::is_same_v<T, BuiltinTD>) {
             // TODO
             return "?";
@@ -114,11 +118,11 @@ std::string to_string(const TypeDescriptor& type, const TypePool& type_pool) {
     return std::visit(visitor, type.type_data());
 }
 
-std::string to_string(TypeId type_id, const TypePool& type_pool) {
+std::string to_string(TypeId type_id, const TypePool& type_pool, const SymbolPool& sym_pool) {
     if (type_id.is_null())
-        return "null type";
+        return "? {null id}";
 
-    return to_string(type_pool.get_td(type_id), type_pool);
+    return to_string(type_pool.get_td(type_id), type_pool, sym_pool);
 }
 
 } // namespace stc::types

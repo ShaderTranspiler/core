@@ -154,10 +154,10 @@ struct StringLiteral : public Expr {
 };
 
 struct SymbolLiteral : public Expr {
-    std::string value;
+    SymbolId value;
 
-    explicit SymbolLiteral(SrcLocationId location, std::string value)
-        : Expr{location, NodeKind::SymLit}, value{std::move(value)} {}
+    explicit SymbolLiteral(SrcLocationId location, SymbolId value)
+        : Expr{location, NodeKind::SymLit}, value{value} {}
 
     SAME_NODE_T_DEF(NodeKind::SymLit)
 };

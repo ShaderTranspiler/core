@@ -3,7 +3,7 @@
 namespace stc::jl {
 
 std::string JLDumper::type_str(TypeId type_id) const {
-    return to_string(type_id, ctx);
+    return to_string(type_id, ctx.type_pool, ctx.sym_pool);
 }
 
 std::string JLDumper::indent() const {
@@ -94,7 +94,7 @@ void JLDumper::visit_StringLiteral(StringLiteral& lit) {
 }
 
 void JLDumper::visit_SymbolLiteral(SymbolLiteral& lit) {
-    out << indent() << "SymbolLiteral: :(" << lit.value << ")\n";
+    out << indent() << "SymbolLiteral: :(" << ctx.get_sym(lit.value) << ")\n";
 }
 
 // CLEANUP: pretty printing for target_fn isa Symbol case

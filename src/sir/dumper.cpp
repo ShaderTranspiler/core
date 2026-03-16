@@ -36,7 +36,7 @@ std::string op_str(OpKind op) {
 namespace stc::sir {
 
 std::string SIRDumper::type_str(TypeId id) const {
-    return to_string(id, ctx.type_pool);
+    return to_string(id, ctx.type_pool, ctx.sym_pool);
 }
 
 std::string SIRDumper::indent() const {
@@ -60,8 +60,8 @@ void SIRDumper::pre_visit_id(NodeId node_id) {
 }
 
 void SIRDumper::visit_VarDecl(VarDecl& var_decl) {
-    out << indent() << "VarDecl: '" << var_decl.identifier << "' <: " << type_str(var_decl.type)
-        << '\n';
+    out << indent() << "VarDecl: '" << ctx.get_sym(var_decl.identifier)
+        << "' <: " << type_str(var_decl.type) << '\n';
 
     if (!var_decl.initializer.is_null()) {
         out << indent() << dump_label("initializer");
@@ -73,7 +73,7 @@ void SIRDumper::visit_VarDecl(VarDecl& var_decl) {
 }
 
 void SIRDumper::visit_FunctionDecl(FunctionDecl& fn_decl) {
-    out << indent() << "FunctionDecl: '" << fn_decl.identifier << "' -> "
+    out << indent() << "FunctionDecl: '" << ctx.get_sym(fn_decl.identifier) << "' -> "
         << type_str(fn_decl.return_type) << '\n';
 
     inc_indent();
@@ -84,12 +84,12 @@ void SIRDumper::visit_FunctionDecl(FunctionDecl& fn_decl) {
 }
 
 void SIRDumper::visit_ParamDecl(ParamDecl& param_decl) {
-    out << indent() << "ParamDecl: " << param_decl.identifier
+    out << indent() << "ParamDecl: " << ctx.get_sym(param_decl.identifier)
         << " <: " << type_str(param_decl.param_type) << '\n';
 }
 
 void SIRDumper::visit_StructDecl(StructDecl& struct_decl) {
-    out << indent() << "StructDecl: " << struct_decl.identifier << '\n';
+    out << indent() << "StructDecl: " << ctx.get_sym(struct_decl.identifier) << '\n';
 
     inc_indent();
     for (NodeId decl : struct_decl.field_decls)
@@ -98,7 +98,7 @@ void SIRDumper::visit_StructDecl(StructDecl& struct_decl) {
 }
 
 void SIRDumper::visit_FieldDecl(FieldDecl& field_decl) {
-    out << indent() << "FieldDecl: " << field_decl.identifier
+    out << indent() << "FieldDecl: " << ctx.get_sym(field_decl.identifier)
         << " <: " << type_str(field_decl.field_type) << '\n';
 }
 
@@ -161,7 +161,8 @@ void SIRDumper::visit_StructInstantiationLiteral(StructInstantiationLiteral& si_
     size_t f_idx = 0;
     for (NodeId f_value : si_lit.field_values) {
         out << indent()
-            << dump_label(std::format("field #{} <=> '{}'", f_idx + 1, s_data->fields[f_idx].name));
+            << dump_label(std::format("field #{} <=> '{}'", f_idx + 1,
+                                      ctx.get_sym(s_data->fields[f_idx].name)));
 
         inc_indent();
         visit(f_value);
@@ -202,7 +203,7 @@ void SIRDumper::visit_ExplicitCast(ExplicitCast& expl_cast) {
 }
 
 void SIRDumper::visit_FunctionCall(FunctionCall& fn_call) {
-    out << indent() << "FunctionCall: '" << fn_call.fn_name << "'\n";
+    out << indent() << "FunctionCall: '" << ctx.get_sym(fn_call.fn_name) << "'\n";
 
     inc_indent();
     for (NodeId arg : fn_call.args)
@@ -216,7 +217,7 @@ void SIRDumper::visit_DeclRefExpr(DeclRefExpr& decl_ref) {
     Decl* decl = dyn_cast<Decl>(node);
     assert(decl != nullptr && "decl ref expr points to nullptr, or a non-decl node");
 
-    out << indent() << "DeclRefExpr to '" << decl->identifier << "'\n";
+    out << indent() << "DeclRefExpr to '" << ctx.get_sym(decl->identifier) << "'\n";
 }
 
 void SIRDumper::visit_ScopedStmt(ScopedStmt& scoped_stmt) {

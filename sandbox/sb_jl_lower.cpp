@@ -5,7 +5,7 @@
 #include <iostream>
 #include <sir/dumper.h>
 
-// NOTE: main() can  throw right now
+// NOTE: main() can throw right now
 int main() { // NOLINT
     using namespace stc;
     using namespace jl;
@@ -23,10 +23,14 @@ int main() { // NOLINT
     auto true_lit  = ctx.emplace_node<BoolLiteral>(loc, true).first;
     auto false_lit = ctx.emplace_node<BoolLiteral>(loc, false).first;
 
-    auto lit_add  = ctx.emplace_node<SymbolLiteral>(loc, "+").first;
-    auto lit_mul  = ctx.emplace_node<SymbolLiteral>(loc, "*").first;
-    auto lit_mul2 = ctx.emplace_node<SymbolLiteral>(loc, "*").first;
-    auto lit_sin  = ctx.emplace_node<SymbolLiteral>(loc, "sin").first;
+    SymbolId sym_add = ctx.sym_pool.get_id("+");
+    SymbolId sym_mul = ctx.sym_pool.get_id("*");
+    SymbolId sym_sin = ctx.sym_pool.get_id("sin");
+
+    auto lit_add  = ctx.emplace_node<SymbolLiteral>(loc, sym_add).first;
+    auto lit_mul  = ctx.emplace_node<SymbolLiteral>(loc, sym_mul).first;
+    auto lit_mul2 = ctx.emplace_node<SymbolLiteral>(loc, sym_mul).first;
+    auto lit_sin  = ctx.emplace_node<SymbolLiteral>(loc, sym_sin).first;
 
     auto binop1 =
         ctx.emplace_node<FunctionCall>(loc, lit_add, std::vector<NodeId>{lit1, lit2}).first;

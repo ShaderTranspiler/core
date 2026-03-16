@@ -22,10 +22,10 @@ inline std::string type_prefix(const TypeDescriptor& td) {
     return "?";
 }
 
-std::string type_str(const TypeDescriptor& td, const TypePool& pool);
+std::string type_str(const TypeDescriptor& td, const TypePool& pool, const SymbolPool& sym_pool);
 
-inline std::string type_str(TypeId type_id, const TypePool& pool) {
-    return type_str(pool.get_td(type_id), pool);
+inline std::string type_str(TypeId type_id, const TypePool& type_pool, const SymbolPool& sym_pool) {
+    return type_str(type_pool.get_td(type_id), type_pool, sym_pool);
 }
 
 } // namespace stc::glsl

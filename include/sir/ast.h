@@ -82,7 +82,7 @@ struct NodeBase {
                       uint32_t node_storage = 0U)
         : location{location},
           _kind{static_cast<uint32_t>(kind)},
-          _node_storage{static_cast<uint32_t>(node_storage)} {
+          _node_storage{0x00FFFFFF & static_cast<uint32_t>(node_storage)} {
 
         assert(node_storage <= 0xFFFFFF && "implicit truncation in node_storage of NodeBase");
     }
@@ -100,10 +100,10 @@ struct NodeBase {
 
 struct Decl : public NodeBase {
     // CLEANUP: better packing for decl, string interning
-    std::string identifier;
+    SymbolId identifier;
 
-    explicit Decl(SrcLocationId location, NodeKind kind, std::string identifier)
-        : NodeBase{location, kind}, identifier{std::move(identifier)} {}
+    explicit Decl(SrcLocationId location, NodeKind kind, SymbolId identifier)
+        : NodeBase{location, kind}, identifier{identifier} {}
 
     Decl(const Decl&)                = default;
     Decl& operator=(const Decl&)     = default;
@@ -137,11 +137,9 @@ struct VarDecl : public Decl {
     TypeId type;
     NodeId initializer;
 
-    explicit VarDecl(SrcLocationId location, std::string var_name, TypeId type,
+    explicit VarDecl(SrcLocationId location, SymbolId var_name, TypeId type,
                      NodeId initializer = NodeId::null_id())
-        : Decl{location, NodeKind::VarDecl, std::move(var_name)},
-          type{type},
-          initializer{initializer} {}
+        : Decl{location, NodeKind::VarDecl, var_name}, type{type}, initializer{initializer} {}
 
     SAME_NODE_T_DEF(NodeKind::VarDecl)
 };
@@ -149,8 +147,8 @@ struct VarDecl : public Decl {
 struct ParamDecl : public Decl {
     TypeId param_type;
 
-    explicit ParamDecl(SrcLocationId location, std::string param_name, TypeId type)
-        : Decl{location, NodeKind::ParamDecl, std::move(param_name)}, param_type{type} {}
+    explicit ParamDecl(SrcLocationId location, SymbolId param_name, TypeId type)
+        : Decl{location, NodeKind::ParamDecl, param_name}, param_type{type} {}
 
     SAME_NODE_T_DEF(NodeKind::ParamDecl)
 };
@@ -160,9 +158,9 @@ struct FunctionDecl : public Decl {
     std::vector<NodeId> param_decls;
     NodeId body;
 
-    explicit FunctionDecl(SrcLocationId location, std::string fn_name, TypeId return_type,
+    explicit FunctionDecl(SrcLocationId location, SymbolId fn_name, TypeId return_type,
                           std::vector<NodeId> param_decls, NodeId body = NodeId::null_id())
-        : Decl{location, NodeKind::FuncDecl, std::move(fn_name)},
+        : Decl{location, NodeKind::FuncDecl, fn_name},
           return_type{return_type},
           param_decls{std::move(param_decls)},
           body{body} {}
@@ -173,8 +171,8 @@ struct FunctionDecl : public Decl {
 struct FieldDecl : public Decl {
     TypeId field_type;
 
-    explicit FieldDecl(SrcLocationId location, std::string field_name, TypeId field_type)
-        : Decl{location, NodeKind::FieldDecl, std::move(field_name)}, field_type{field_type} {}
+    explicit FieldDecl(SrcLocationId location, SymbolId field_name, TypeId field_type)
+        : Decl{location, NodeKind::FieldDecl, field_name}, field_type{field_type} {}
 
     SAME_NODE_T_DEF(NodeKind::FieldDecl)
 };
@@ -182,10 +180,9 @@ struct FieldDecl : public Decl {
 struct StructDecl : public Decl {
     std::vector<NodeId> field_decls;
 
-    explicit StructDecl(SrcLocationId location, std::string struct_name,
+    explicit StructDecl(SrcLocationId location, SymbolId struct_name,
                         std::vector<NodeId> field_decls)
-        : Decl{location, NodeKind::StructDecl, std::move(struct_name)},
-          field_decls{std::move(field_decls)} {}
+        : Decl{location, NodeKind::StructDecl, struct_name}, field_decls{std::move(field_decls)} {}
 
     SAME_NODE_T_DEF(NodeKind::StructDecl)
 };
@@ -196,7 +193,7 @@ struct StructDecl : public Decl {
 
 /*
 Stmt has 24 free bits for storage
-TypeId (16 bits) is packed into the upper 16 bits, lower 8 bits remains free for children
+TypeId (16 bits) is packed into the upper 16 bits, lower 8 bits remain free for children
 */
 struct Expr : public Stmt {
     explicit Expr(SrcLocationId location, NodeKind kind, TypeId type, uint8_t node_storage = 0U)
@@ -205,7 +202,7 @@ struct Expr : public Stmt {
     explicit Expr(SrcLocationId location, NodeKind kind, uint8_t node_storage = 0U)
         : Expr{location, kind, TypeId::null_id(), node_storage} {}
 
-    TypeId type() const { return static_cast<TypeId>((_node_storage >> 8) & 0xFFFF); }
+    TypeId type() const { return static_cast<TypeId::id_type>((_node_storage >> 8) & 0x0000FFFF); }
     uint8_t node_storage() const { return static_cast<uint8_t>(_node_storage & 0xFF); }
 
     static bool same_node_t(const NodeBase* node) {
@@ -274,13 +271,13 @@ struct ArrayLiteral : public Expr {
 };
 
 struct StructInstantiationLiteral : public Expr {
-    std::string struct_name;
+    SymbolId struct_name;
     std::vector<NodeId> field_values;
 
-    explicit StructInstantiationLiteral(SrcLocationId location, std::string struct_name,
+    explicit StructInstantiationLiteral(SrcLocationId location, SymbolId struct_name,
                                         std::vector<NodeId> field_values)
         : Expr{location, NodeKind::StructInstLit},
-          struct_name{std::move(struct_name)},
+          struct_name{struct_name},
           field_values{std::move(field_values)} {}
 
     SAME_NODE_T_DEF(NodeKind::StructInstLit)
@@ -318,11 +315,11 @@ struct ExplicitCast : public Expr {
 };
 
 struct FunctionCall : public Expr {
-    std::string fn_name;
+    SymbolId fn_name;
     std::vector<NodeId> args;
 
-    explicit FunctionCall(SrcLocationId location, std::string fn_name, std::vector<NodeId> args)
-        : Expr{location, NodeKind::FnCall}, fn_name{std::move(fn_name)}, args{std::move(args)} {}
+    explicit FunctionCall(SrcLocationId location, SymbolId fn_name, std::vector<NodeId> args)
+        : Expr{location, NodeKind::FnCall}, fn_name{fn_name}, args{std::move(args)} {}
 
     SAME_NODE_T_DEF(NodeKind::FnCall)
 };

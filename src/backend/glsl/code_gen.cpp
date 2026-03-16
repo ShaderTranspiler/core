@@ -42,7 +42,8 @@ std::string GLSLCodeGenVisitor::indent() const {
 // ================
 
 void GLSLCodeGenVisitor::visit_VarDecl(VarDecl& var_decl) {
-    out << indent() << type_str(var_decl.type, ctx) << ' ' << var_decl.identifier;
+    out << indent() << type_str(var_decl.type, ctx.type_pool, ctx.sym_pool) << ' '
+        << ctx.get_sym(var_decl.identifier);
 
     if (!var_decl.initializer.is_null()) {
         out << " = ";
@@ -56,7 +57,8 @@ void GLSLCodeGenVisitor::visit_FunctionDecl(FunctionDecl& fn_decl) {
     assert(ctx.isa<CompoundStmt>(fn_decl.body) &&
            "non-compound-stmt function body not caught by sema");
 
-    out << indent() << type_str(fn_decl.return_type, ctx) << " " << fn_decl.identifier << '(';
+    out << indent() << type_str(fn_decl.return_type, ctx.type_pool, ctx.sym_pool) << " "
+        << ctx.get_sym(fn_decl.identifier) << '(';
 
     for (size_t i = 0; i < fn_decl.param_decls.size(); i++) {
         NodeId param_decl = fn_decl.param_decls[i];
@@ -81,11 +83,12 @@ void GLSLCodeGenVisitor::visit_FunctionDecl(FunctionDecl& fn_decl) {
 }
 
 void GLSLCodeGenVisitor::visit_ParamDecl(ParamDecl& param_decl) {
-    out << type_str(param_decl.param_type, ctx) << ' ' << param_decl.identifier;
+    out << type_str(param_decl.param_type, ctx.type_pool, ctx.sym_pool) << ' '
+        << ctx.get_sym(param_decl.identifier);
 }
 
 void GLSLCodeGenVisitor::visit_StructDecl(StructDecl& struct_decl) {
-    out << "struct " << struct_decl.identifier << "\n{\n";
+    out << "struct " << ctx.get_sym(struct_decl.identifier) << "\n{\n";
 
     for (NodeId field_decl : struct_decl.field_decls) {
         assert(ctx.isa<FieldDecl>(field_decl) &&
@@ -99,7 +102,8 @@ void GLSLCodeGenVisitor::visit_StructDecl(StructDecl& struct_decl) {
 }
 
 void GLSLCodeGenVisitor::visit_FieldDecl(FieldDecl& field_decl) {
-    out << type_str(field_decl.field_type, ctx) << ' ' << field_decl.identifier;
+    out << type_str(field_decl.field_type, ctx.type_pool, ctx.sym_pool) << ' '
+        << ctx.get_sym(field_decl.identifier);
 }
 
 // ===============
@@ -122,7 +126,7 @@ void GLSLCodeGenVisitor::visit_VectorLiteral(VectorLiteral& vec_lit) {
     const TypeDescriptor& td = ctx.type_pool.get_td(vec_lit.type());
     assert(td.is_vector());
 
-    out << type_str(td, ctx) << '(';
+    out << type_str(td, ctx.type_pool, ctx.sym_pool) << '(';
 
     size_t n = vec_lit.components.size();
     for (size_t i = 0; i < n; i++) {
@@ -139,7 +143,7 @@ void GLSLCodeGenVisitor::visit_MatrixLiteral(MatrixLiteral& mat_lit) {
     assert(ctx.type_pool.is_type_of<MatrixTD>(mat_lit.type()) &&
            "MatrixLiteral with non-matrix type in AST");
 
-    out << type_str(mat_lit.type(), ctx) << '(';
+    out << type_str(mat_lit.type(), ctx.type_pool, ctx.sym_pool) << '(';
 
     for (size_t i = 0; i < mat_lit.data.size(); i++) {
         visit(mat_lit.data[i]);
@@ -159,11 +163,10 @@ void GLSLCodeGenVisitor::visit_MatrixLiteral(MatrixLiteral& mat_lit) {
 void GLSLCodeGenVisitor::visit_ArrayLiteral(ArrayLiteral& arr_lit) {
     assert(ctx.type_pool.is_type_of<ArrayTD>(arr_lit.type()) &&
            "ArrayLiteral with non-array type in AST");
-    ArrayTD arr_td = ctx.type_pool.get_td(arr_lit.type()).as<ArrayTD>();
 
-    out << type_str(arr_lit.type(), ctx) << '(';
+    out << type_str(arr_lit.type(), ctx.type_pool, ctx.sym_pool) << '(';
 
-    assert(arr_lit.elements.size() == arr_td.length &&
+    assert(arr_lit.elements.size() == ctx.type_pool.get_td(arr_lit.type()).as<ArrayTD>().length &&
            "array literal with wrong # of elements not caught by sema");
 
     for (size_t i = 0; i < arr_lit.elements.size(); i++) {
@@ -183,7 +186,7 @@ void GLSLCodeGenVisitor::visit_StructInstantiationLiteral(StructInstantiationLit
     StructTD s_td = ctx.type_pool.get_td(si_lit.type()).as<StructTD>();
     assert(s_td.data != nullptr && "StructTD without data storage");
 
-    out << s_td.data->name << '(';
+    out << ctx.get_sym(s_td.data->name) << '(';
 
     for (size_t i = 0; i < si_lit.field_values.size(); i++) {
         visit(si_lit.field_values[i]);
@@ -209,13 +212,13 @@ void GLSLCodeGenVisitor::visit_BinaryOp(BinaryOp& bin_op) {
 }
 
 void GLSLCodeGenVisitor::visit_ExplicitCast(ExplicitCast& cast) {
-    out << type_str(cast.type(), ctx) << '(';
+    out << type_str(cast.type(), ctx.type_pool, ctx.sym_pool) << '(';
     visit(cast.inner);
     out << ')';
 }
 
 void GLSLCodeGenVisitor::visit_FunctionCall(FunctionCall& fn_call) {
-    out << fn_call.fn_name << '(';
+    out << ctx.get_sym(fn_call.fn_name) << '(';
 
     for (size_t i = 0; i < fn_call.args.size(); i++) {
         visit(fn_call.args[i]);
@@ -234,7 +237,7 @@ void GLSLCodeGenVisitor::visit_DeclRefExpr(DeclRefExpr& decl_ref) {
     Decl* decl = dyn_cast<Decl>(decl_node);
     assert(decl != nullptr && "non-decl pointing DeclRefExpr not caught by sema");
 
-    out << decl->identifier;
+    out << ctx.get_sym(decl->identifier);
 }
 
 // ================

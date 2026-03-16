@@ -12,3 +12,6 @@ _deps*/
 out/
 vs_build/
 vs_install/
+
+# CLion
+.idea/

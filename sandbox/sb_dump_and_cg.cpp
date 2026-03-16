@@ -40,8 +40,11 @@ int main() { // NOLINT
 
     dumper.visit(NodeId{cmpd});
 
-    auto vdecl_no_init   = ctx.emplace_node<VarDecl>(loc, "my_var1", i32).first;
-    auto vdecl_with_init = ctx.emplace_node<VarDecl>(loc, "my_var2", u32, binop1).first;
+    SymbolId sym_id1 = ctx.sym_pool.get_id("my_var1");
+    SymbolId sym_id2 = ctx.sym_pool.get_id("my_var2");
+
+    auto vdecl_no_init   = ctx.emplace_node<VarDecl>(loc, sym_id1, i32).first;
+    auto vdecl_with_init = ctx.emplace_node<VarDecl>(loc, sym_id2, u32, binop1).first;
 
     dumper.visit(vdecl_no_init);
     dumper.visit(vdecl_with_init);

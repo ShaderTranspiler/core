@@ -16,6 +16,7 @@ Here is a (very) rough overview of the development timeline and its current prog
 - [x] Julia IR
 - [x] Julia -> SIR lowering
 - [x] GLSL code generation
+- [x] Symbol interning
 - [ ] Julia Pkg API
 - [ ] Julia type inference (bidirectional type checking)
 - [ ] Configuration API
@@ -48,7 +49,7 @@ The recommended way to use Visual Studio for development is to simply not, whene
 
 ### Approach #2
 
-If [Approach #1](#approach-1) is not applicable, the second best way to use Visual Studio is to open the root directory directly, rather than the CMake generated solution and project files. VS will still integrate with CMake, and will use it for configuring and building the project. The reasoning for this approach is that this allows the use of tools like clang-tidy, which Visual Studio (and MSVC in general) mostly ignores otherwise, when ran directly on the generated files.
+If [Approach #1](#approach-1) is not applicable, the second-best way to use Visual Studio is to open the root directory directly, rather than the CMake generated solution and project files. VS will still integrate with CMake, and will use it for configuring and building the project. The reasoning for this approach is that this allows the use of tools like clang-tidy, which Visual Studio (and MSVC in general) mostly ignores otherwise, when ran directly on the generated files.
 
 There are a couple of build configurations provided (see *CMakeSettings.json* for details). The main difference is the generator they use (Ninja or VS, where Ninja is **highly** recommended over VS), and whether Debug or Release config is used for building. All configs are x64-based, though x86 can be set up later, if needed. All configs also use MSVC, though, again, this can be extended in the future to include clang, gcc, etc. (however, with other compilers, any environment other than VS probably offers a better dev experience, see [Approach #1](#approach-1)).
 

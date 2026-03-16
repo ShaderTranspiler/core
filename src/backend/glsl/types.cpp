@@ -1,11 +1,13 @@
 #include "backend/glsl/types.h"
+#include "ast/context.h"
 
 #include <format>
 
 namespace stc::glsl {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-std::string type_str(const TypeDescriptor& td, const TypePool& type_pool) {
+std::string type_str(const TypeDescriptor& td, const TypePool& type_pool,
+                     const SymbolPool& sym_pool) {
     if (td.is<VoidTD>())
         return "void";
 
@@ -39,9 +41,9 @@ std::string type_str(const TypeDescriptor& td, const TypePool& type_pool) {
         const auto& col_td            = type_pool.get_td(col_type_id);
         assert(col_td.is_vector() && "non-vector matrix column type");
 
-        auto [comp_type_id, row_count] = col_td.as<VectorTD>();
+        auto [comp_type_id, row_count] = col_td.template as<VectorTD>();
         const auto& comp_td            = type_pool.get_td(comp_type_id);
-        assert(comp_td.is<FloatTD>() && "non-floating point matrix component type");
+        assert(comp_td.template is<FloatTD>() && "non-floating point matrix component type");
 
         return std::format("{}mat{}x{}", type_prefix(comp_td), col_count, row_count);
     }
@@ -55,17 +57,17 @@ std::string type_str(const TypeDescriptor& td, const TypePool& type_pool) {
             dims_str += std::format("[{}]", it_td->as<ArrayTD>().length);
             auto [elem_type_id, dim_length] = it_td->as<ArrayTD>();
 
-            it_td = &type_pool.get_td(elem_type_id);
+            it_td = &(type_pool.get_td(elem_type_id));
         } while (it_td->is_array());
 
-        return type_str(*it_td, type_pool) + dims_str;
+        return type_str(*it_td, type_pool, sym_pool) + dims_str;
     }
 
     if (td.is_struct()) {
         auto [data_ptr] = td.as<StructTD>();
         assert(data_ptr != nullptr && "StructTD without struct data");
 
-        return data_ptr->name;
+        return std::string{sym_pool.get_symbol(data_ptr->name)};
     }
 
     assert(false && "missing type case in glsl code gen's type_str");

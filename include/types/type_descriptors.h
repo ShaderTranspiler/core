@@ -10,11 +10,12 @@
 #include <variant>
 #include <vector>
 
+#include "ast/symbol_pool.h"
 #include "common/utils.h"
 
 namespace stc::types {
 
-// basic types modelled after SPIR-V's unified specs
+// basic types modeled after SPIR-V's unified specs
 // some liberties have been taken for a more general sir type system
 // this includes allowing non-float types as matrix component types,
 // these can potentially be rewritten as arrays in the output (similarly to slang -> GLSL/SPIR-V)
@@ -101,13 +102,13 @@ struct ArrayTD {
 
 struct StructData {
     struct FieldInfo {
+        const SymbolId name;
         const TypeId type;
-        const std::string name;
 
         constexpr bool operator==(const FieldInfo&) const = default;
     };
 
-    const std::string name;
+    const SymbolId name;
     const std::vector<FieldInfo> fields;
 
     constexpr bool operator==(const StructData&) const = default;
@@ -134,8 +135,6 @@ struct BuiltinTD {
 
 using TDVariantType =
     std::variant<VoidTD, BoolTD, IntTD, FloatTD, VectorTD, MatrixTD, ArrayTD, StructTD, BuiltinTD>;
-
-static_assert(std::is_copy_constructible_v<TDVariantType>);
 
 // CLEANUP: use a variadic template instead
 template <typename T>
@@ -183,17 +182,11 @@ private:
 };
 static_assert(sizeof(TypeDescriptor) == sizeof(TDVariantType));
 
-std::string to_string(const TypeDescriptor&, const TypePool&);
-std::string to_string(TypeId, const TypePool&);
+std::string to_string(const TypeDescriptor& td, const TypePool& type_pool,
+                      const SymbolPool& sym_pool);
+std::string to_string(TypeId id, const TypePool& type_pool, const SymbolPool& sym_pool);
 
 } // namespace stc::types
-
-template <>
-struct std::hash<stc::types::TypeId> {
-    size_t operator()(const stc::types::TypeId& x) const noexcept {
-        return std::hash<stc::types::TypeId::id_type>{}(x.value);
-    }
-};
 
 template <>
 struct std::hash<stc::types::VoidTD> {
@@ -243,14 +236,14 @@ struct std::hash<stc::types::ArrayTD> {
 template <>
 struct std::hash<stc::types::StructData::FieldInfo> {
     size_t operator()(const stc::types::StructData::FieldInfo& x) const noexcept {
-        return stc::hash_combine(std::hash<std::string>{}(x.name), x.type);
+        return stc::hash_combine(std::hash<stc::SymbolId>{}(x.name), x.type);
     }
 };
 
 template <>
 struct std::hash<stc::types::StructData> {
     size_t operator()(const stc::types::StructData& x) const noexcept {
-        size_t h = std::hash<std::string>{}(x.name);
+        size_t h = std::hash<stc::SymbolId>{}(x.name);
 
         for (const auto& field : x.fields) {
             h = stc::hash_combine(h, field);
@@ -264,7 +257,7 @@ template <>
 struct std::hash<stc::types::StructTD> {
     size_t operator()(const stc::types::StructTD& x) const noexcept {
         const stc::types::StructData& data =
-            x.data != nullptr ? *x.data : stc::types::StructData{"", {}};
+            x.data != nullptr ? *x.data : stc::types::StructData{stc::SymbolId::null_id(), {}};
 
         return std::hash<stc::types::StructData>{}(data);
     }

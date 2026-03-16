@@ -100,8 +100,7 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     for (NodeId arg : fn_call.args)
         args.push_back(visit_and_check(arg));
 
-    return emplace_node<sir::FunctionCall>(fn_call.location, std::move(sym_lit->value),
-                                           std::move(args));
+    return emplace_node<sir::FunctionCall>(fn_call.location, sym_lit->value, std::move(args));
 }
 
 SIRNodeId JLLoweringVisitor::visit_IfExpr(IfExpr& if_expr) {

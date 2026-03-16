@@ -97,28 +97,33 @@ TypeId TypePool::builtin_td(uint8_t kind) {
     return id;
 }
 
-TypeId TypePool::get_struct_td(std::string_view name) {
+TypeId TypePool::get_struct_td(SymbolId name) {
     if (auto it = struct_map.find(name); it != struct_map.end())
         return it->second;
 
     return TypeId::null_id();
 }
 
-TypeId TypePool::make_struct_td(std::string name, std::vector<StructData::FieldInfo> fields) {
-    if (name.empty())
+TypeId TypePool::make_struct_td(SymbolId name, std::vector<StructData::FieldInfo> fields,
+                                const SymbolPool& sym_pool) {
+    std::string_view struct_name = sym_pool.get_symbol(name);
+
+    if (struct_name.empty())
         throw std::logic_error{"Cannot create struct type with an empty type name"};
 
-    if (std::ranges::any_of(fields, [](const StructData::FieldInfo& f) { return f.name.empty(); }))
+    if (std::ranges::any_of(fields, [&sym_pool](const StructData::FieldInfo& f) {
+            std::string_view sym = sym_pool.get_symbol(f.name);
+            return sym.empty();
+        }))
         throw std::logic_error{"Cannot create struct type with an empty field name"};
 
-    if (has_duplicates(fields,
-                       [](const StructData::FieldInfo& fi) -> std::string_view { return fi.name; }))
+    if (has_duplicates(fields, [](const StructData::FieldInfo& fi) -> SymbolId { return fi.name; }))
         throw std::logic_error{"Field names have to be unique inside structs"};
 
     if (struct_map.contains(name))
         throw std::logic_error{"Cannot create two structs with identical names"};
 
-    auto [_, data_ptr] = arena.emplace<StructData>(std::move(name), std::move(fields));
+    auto [_, data_ptr] = arena.emplace<StructData>(name, std::move(fields));
     TypeId t_id        = insert_or_get(StructTD{data_ptr}, true);
 
     struct_map[data_ptr->name] = t_id;

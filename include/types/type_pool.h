@@ -76,8 +76,9 @@ public:
         return builtin_td(static_cast<uint8_t>(kind));
     }
 
-    [[nodiscard]] TypeId get_struct_td(std::string_view name);
-    TypeId make_struct_td(std::string name, std::vector<StructData::FieldInfo> fields);
+    [[nodiscard]] TypeId get_struct_td(SymbolId name);
+    TypeId make_struct_td(SymbolId name, std::vector<StructData::FieldInfo> fields,
+                          const SymbolPool& sym_pool);
 
 private:
     TypeId get(TDVariantType type) const;
@@ -85,7 +86,7 @@ private:
 
     ArenaTy arena;
     std::unordered_map<TDVariantType, TypeId> pool;
-    std::unordered_map<std::string_view, TypeId> struct_map;
+    std::unordered_map<SymbolId, TypeId> struct_map;
 };
 
 } // namespace stc::types

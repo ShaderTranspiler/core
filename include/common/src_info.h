@@ -27,7 +27,7 @@ struct SrcLocation {
     const uint32_t col  : 12;
 
     constexpr explicit SrcLocation(uint32_t l, uint32_t c)
-        : line(l), col(c) {
+        : line(0x000FFFFF & l), col(0x00000FFF & c) {
         assert(l > 0 && c > 0 && "Line and col numbers cannot be zero");
         assert(l < (1U << 20) && "Line number exceeds upper bound");
         assert(c < (1U << 12) && "Column number exceeds upper bound");
