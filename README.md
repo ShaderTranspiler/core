@@ -12,7 +12,7 @@ Here is a (very) rough overview of the development timeline and its current prog
 
 - [x] Project setup (CMake, testing, etc.)
 - [x] Implement base structures and features, like BumpArena, Shader IR (SIR) type system, SIR AST base, etc.
-- [ ] Shader IR (SIR) semantic verification pass
+- [x] Shader IR (SIR) semantic verification pass
 - [x] Julia IR
 - [x] Julia -> SIR lowering
 - [x] GLSL code generation
