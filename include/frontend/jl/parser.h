@@ -3,8 +3,8 @@
 #include "frontend/jl/ast.h"
 #include "frontend/jl/context.h"
 #include "frontend/jl/parser_caches.h"
+#include "julia_wrapper.h"
 #include "sir/context.h"
-#include <julia.h>
 
 #define PARSER_DECL(name) NodeId parse_##name(jl_expr_t* expr, size_t nargs)
 

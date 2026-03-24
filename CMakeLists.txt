@@ -135,9 +135,12 @@ endif()
 
 add_library(CommonConfig INTERFACE)
 
-# extra safety options
+# TODO: use symbol hiding by default, once the lib API is in a semi-stable state
+# it would also be nice to side step potential issues with this for sandboxes
+
 if (MSVC)
-    # /Zc:preprocessor (standard-conforming preprocessor) needed for X-macro system (__VA_ARGS__ expansion)
+    # apparently MSVC preprocessor is not standard-confirming by default
+    # /Zc:preprocessor needed for X-macro system (__VA_ARGS__ expansion)
     target_compile_options(CommonConfig INTERFACE /W4 /Zc:preprocessor)
 else()
     target_compile_options(CommonConfig INTERFACE

@@ -1,7 +1,10 @@
 #pragma once
 
+#include <limits>
+#include <optional>
+
 #include "common/bump_arena.h"
-#include "julia.h"
+#include "julia_wrapper.h"
 
 namespace stc::jl {
 

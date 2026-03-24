@@ -1,6 +1,6 @@
 #pragma once
 
-#include <julia.h>
+#include "julia_wrapper.h"
 
 namespace stc::jl {
 

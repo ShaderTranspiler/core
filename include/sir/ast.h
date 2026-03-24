@@ -7,7 +7,7 @@
 #include <tuple>
 #include <vector>
 
-#include "common/base.h"
+#include "base.h"
 #include "common/src_info.h"
 #include "common/utils.h"
 #include "types/types.h"
@@ -100,7 +100,7 @@ struct NodeBase {
 };
 
 struct Decl : public NodeBase {
-    // CLEANUP: better packing for decl, string interning
+    // CLEANUP: better packing for decl
     SymbolId identifier;
 
     explicit Decl(SrcLocationId location, NodeKind kind, SymbolId identifier)

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <julia.h>
+#include "julia_wrapper.h"
 
-#include "common/base.h"
+#include "base.h"
 
 namespace stc::jl {
 
