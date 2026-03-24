@@ -11,8 +11,10 @@ class JLLoweringVisitor final : public JLVisitor<JLLoweringVisitor, JLCtx, sir::
 public:
     explicit JLLoweringVisitor(JLCtx&& ctx)
         : JLVisitor{ctx}, sir_ctx{sir::SIRCtx::move_pools_from(std::move(ctx))} {
-        // sir_ctx.src_info_pool = std::move(ctx.src_info_pool);
-        // sir_ctx.type_pool     = std::move(ctx.type_pool);
+
+        sym_plus     = sir_ctx.sym_pool.get_id("+");
+        sym_minus    = sir_ctx.sym_pool.get_id("-");
+        sym_asterisk = sir_ctx.sym_pool.get_id("*");
     }
 
     SIRNodeId visit_default_case();
@@ -22,14 +24,6 @@ public:
         #include "frontend/jl/node_defs/all_nodes.def"
     #undef X
     // clang-format on
-
-    // CLEANUP
-    /*
-    sir::SIRCtx&& steal_ctx() {
-        sir_ctx.src_info_pool = std::move(ctx.src_info_pool);
-        return std::move(sir_ctx);
-    }
-    */
 
     bool successful() const { return success; }
     sir::SIRCtx sir_ctx;
@@ -47,6 +41,8 @@ private:
 
     // skips id-lookup roundtrip for nodes that have already been looked up
     SIRNodeId visit_ptr(Expr* node);
+
+    SymbolId sym_plus, sym_minus, sym_asterisk;
 };
 
 } // namespace stc::jl

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "ast/context.h"
+#include "common/literals.h"
 #include "frontend/jl/ast.h"
+#include "frontend/jl/module_pool.h"
 
 namespace stc::jl {
 
@@ -16,14 +18,25 @@ class JLCtx : public ASTCtx<NodeId, Expr> {
     using Base = ASTCtx<NodeId, Expr>;
 
 public:
+    ModulePool module_pool;
+
     // clang-format off
     #define X(type) types::TypeId type() const { return _##type; }
         #include "frontend/jl/node_defs/types.def"
     #undef X
     // clang-format on
 
-    explicit JLCtx()
-        : Base{{{BuiltinTypeKind::Nothing}, {BuiltinTypeKind::String}, {BuiltinTypeKind::Symbol}}} {
+    explicit JLCtx(NodeId::id_type node_arena_kb            = 128U,
+                   SrcLocationId::id_type src_info_arena_kb = 128U,
+                   TypeId::id_type type_arena_kb = 32U, SymbolId::id_type sym_arena_kb = 64U,
+                   ModuleId::id_type module_arena_b = 128_u8)
+        : ASTCtx{{{BuiltinTypeKind::Nothing}, {BuiltinTypeKind::String}, {BuiltinTypeKind::Symbol}},
+                 node_arena_kb,
+                 src_info_arena_kb,
+                 type_arena_kb,
+                 sym_arena_kb},
+          module_pool{module_arena_b} {
+
         init_jl_types();
     }
 

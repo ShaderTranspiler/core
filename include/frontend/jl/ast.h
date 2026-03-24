@@ -2,12 +2,16 @@
 
 #include "common/src_info.h"
 #include "common/utils.h"
+#include "frontend/jl/module_pool.h"
 #include "types/types.h"
 
 #define SAME_NODE_KIND_DEF(Kind)                                                                   \
     static bool same_node_kind(NodeKind kind) {                                                    \
         return kind == (Kind);                                                                     \
     }
+
+#define ASSERT_NOT_NULL(id)                                                                        \
+    assert(!((id).is_null()) && "trying to init non-nullable id field of AST node with null id")
 
 namespace stc::jl {
 
@@ -26,6 +30,12 @@ enum class NodeKind : uint8_t {
     #define X(type, kind) kind,
 
     InvalidKind,
+
+    FirstDecl,
+    #define X_FIRST(type, kind) kind = FirstDecl,
+        #include "frontend/jl/node_defs/decl.def"
+    #undef X_FIRST
+    LastDecl = FieldDecl,
 
     FirstExpr,    
     #define X_FIRST(type, kind) kind = FirstExpr,
@@ -52,7 +62,9 @@ struct Expr {
     uint8_t _node_storage;
 
     explicit Expr(SrcLocationId location, NodeKind kind, TypeId type, uint8_t node_storage = 0U)
-        : location{location}, type{type}, _kind{kind}, _node_storage{node_storage} {}
+        : location{location}, type{type}, _kind{kind}, _node_storage{node_storage} {
+        ASSERT_NOT_NULL(location);
+    }
 
     explicit Expr(SrcLocationId location, NodeKind kind, uint8_t node_storage = 0U)
         : Expr{location, kind, TypeId::null_id(), node_storage} {}
@@ -77,11 +89,124 @@ struct Stmt : public Expr {
     }
 };
 
+struct Decl : public Expr {
+    SymbolId identifier;
+
+    explicit Decl(SrcLocationId location, NodeKind kind, SymbolId identifier, uint8_t node_storage)
+        : Expr{location, kind, node_storage}, identifier{identifier} {
+        ASSERT_NOT_NULL(identifier);
+    }
+
+    explicit Decl(SrcLocationId location, NodeKind kind, SymbolId identifier)
+        : Expr{location, kind}, identifier{identifier} {
+        ASSERT_NOT_NULL(identifier);
+    }
+
+    static bool same_node_kind(NodeKind kind) {
+        return NodeKind::FirstDecl <= kind && kind <= NodeKind::LastDecl;
+    }
+};
+
+// ================
+//   Declarations
+// ================
+
+struct VarDecl : public Decl {
+    enum class VDeclScope : uint8_t { local, global, unspec };
+
+    TypeId type;
+    NodeId initializer;
+
+    explicit VarDecl(SrcLocationId location, SymbolId identifier, TypeId type, VDeclScope scope,
+                     NodeId initializer = NodeId::null_id())
+        : Decl{location, NodeKind::VarDecl, identifier, static_cast<uint8_t>(scope)},
+          type{type},
+          initializer{initializer} {}
+
+    VDeclScope scope() const { return static_cast<VDeclScope>(_node_storage); }
+
+    SAME_NODE_KIND_DEF(NodeKind::VarDecl)
+};
+
+struct FunctionDecl : public Decl {
+    TypeId ret_type;
+    std::vector<NodeId> param_decls;
+    NodeId body;
+
+    explicit FunctionDecl(SrcLocationId location, SymbolId identifier, TypeId ret_type,
+                          std::vector<NodeId> param_decls, NodeId body)
+        : Decl{location, NodeKind::FnDecl, identifier},
+          ret_type{ret_type},
+          param_decls{std::move(param_decls)},
+          body{body} {
+
+        ASSERT_NOT_NULL(body);
+
+        for (NodeId decl : param_decls)
+            ASSERT_NOT_NULL(decl);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::FnDecl)
+};
+
+struct ParamDecl : public Decl {
+    TypeId type;
+    NodeId default_initializer;
+
+    explicit ParamDecl(SrcLocationId location, SymbolId identifier, TypeId type,
+                       bool is_kwarg = false, NodeId default_initializer = NodeId::null_id())
+        : Decl{location, NodeKind::ParamDecl, identifier, static_cast<uint8_t>(is_kwarg)},
+          type{type},
+          default_initializer{default_initializer} {
+
+        ASSERT_NOT_NULL(type);
+    }
+
+    bool is_kwarg() const { return static_cast<bool>(_node_storage); }
+
+    SAME_NODE_KIND_DEF(NodeKind::ParamDecl)
+};
+
+// FEATURE: support for parametric types
+struct StructDecl : public Decl {
+    std::vector<NodeId> field_decls;
+
+    explicit StructDecl(SrcLocationId location, SymbolId identifier,
+                        std::vector<NodeId> field_decls)
+        : Decl{location, NodeKind::StructDecl, identifier}, field_decls{std::move(field_decls)} {
+
+        for (NodeId decl : field_decls)
+            ASSERT_NOT_NULL(decl);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::StructDecl)
+};
+
+struct FieldDecl : public Decl {
+    TypeId type;
+
+    explicit FieldDecl(SrcLocationId location, SymbolId identifier, TypeId type)
+        : Decl{location, NodeKind::FieldDecl, identifier}, type{type} {
+
+        ASSERT_NOT_NULL(type);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::FieldDecl)
+};
+
+// ===============
+//   Expressions
+// ===============
+
 struct CompoundExpr : public Expr {
     std::vector<NodeId> body;
 
     explicit CompoundExpr(SrcLocationId location, std::vector<NodeId> body)
-        : Expr{location, NodeKind::Compound}, body{std::move(body)} {}
+        : Expr{location, NodeKind::Compound}, body{std::move(body)} {
+
+        for (NodeId expr : body)
+            ASSERT_NOT_NULL(expr);
+    }
 
     explicit CompoundExpr(SrcLocationId location, std::initializer_list<NodeId> nodes)
         : CompoundExpr{location, std::vector<NodeId>{nodes}} {}
@@ -97,6 +222,8 @@ struct BoolLiteral : public Expr {
 
     SAME_NODE_KIND_DEF(NodeKind::BoolLit)
 };
+
+// TODO: char literal, nothing literal?, missing type + literal?
 
 namespace detail {
 
@@ -160,9 +287,70 @@ struct SymbolLiteral : public Expr {
     SymbolId value;
 
     explicit SymbolLiteral(SrcLocationId location, SymbolId value)
-        : Expr{location, NodeKind::SymLit}, value{value} {}
+        : Expr{location, NodeKind::SymLit}, value{value} {
+
+        ASSERT_NOT_NULL(value);
+    }
 
     SAME_NODE_KIND_DEF(NodeKind::SymLit)
+};
+
+// FEATURE: parse OpaqueValue into actual literals when possible during sema
+
+// stores raw memory values found in the Julia AST
+// uses void* instead of jl_value_t* to avoid propagating julia.h inclusion beyond the parser
+struct OpaqueValue : public Expr {
+    SymbolId jl_type_name;
+    void* jl_value;
+
+    explicit OpaqueValue(SrcLocationId location, SymbolId jl_type_name, void* jl_value)
+        : Expr{location, NodeKind::OpaqValue}, jl_type_name{jl_type_name}, jl_value{jl_value} {
+
+        ASSERT_NOT_NULL(jl_type_name);
+        assert(jl_value != nullptr &&
+               "trying to store nullptr in OpaqueValue's raw julia memory pointer");
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::OpaqValue)
+};
+
+struct GlobalRef : public Expr {
+    ModuleId module;
+    SymbolId sym_name;
+
+    explicit GlobalRef(SrcLocationId location, ModuleId module, SymbolId sym_name)
+        : Expr{location, NodeKind::GlobalRef}, module{module}, sym_name{sym_name} {
+
+        ASSERT_NOT_NULL(module);
+        ASSERT_NOT_NULL(sym_name);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::GlobalRef)
+};
+
+struct DeclRefExpr : public Expr {
+    NodeId decl;
+
+    explicit DeclRefExpr(SrcLocationId location, NodeId decl)
+        : Expr{location, NodeKind::DeclRef}, decl{decl} {
+
+        ASSERT_NOT_NULL(decl);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::DeclRef)
+};
+
+struct Assignment : public Expr {
+    NodeId target, value;
+
+    explicit Assignment(SrcLocationId location, NodeId target, NodeId value)
+        : Expr{location, NodeKind::Assignment}, target{target}, value{value} {
+
+        ASSERT_NOT_NULL(target);
+        ASSERT_NOT_NULL(value);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::Assignment)
 };
 
 struct FunctionCall : public Expr {
@@ -170,7 +358,13 @@ struct FunctionCall : public Expr {
     std::vector<NodeId> args;
 
     explicit FunctionCall(SrcLocationId location, NodeId target_fn, std::vector<NodeId> args)
-        : Expr{location, NodeKind::FnCall}, target_fn{target_fn}, args{std::move(args)} {}
+        : Expr{location, NodeKind::FnCall}, target_fn{target_fn}, args{std::move(args)} {
+
+        ASSERT_NOT_NULL(target_fn);
+
+        for (NodeId arg : args)
+            ASSERT_NOT_NULL(arg);
+    }
 
     explicit FunctionCall(SrcLocationId location, NodeId target_fn,
                           std::initializer_list<NodeId> args)
@@ -187,15 +381,23 @@ struct IfExpr : public Expr {
         : Expr{location, NodeKind::If},
           condition{condition},
           true_branch{true_branch},
-          false_branch{false_branch} {}
+          false_branch{false_branch} {
+
+        ASSERT_NOT_NULL(condition);
+        ASSERT_NOT_NULL(true_branch);
+    }
 
     SAME_NODE_KIND_DEF(NodeKind::If)
 };
 
+// ==============
+//   Statements
+// ==============
+
 struct ReturnStmt : public Stmt {
     NodeId inner;
 
-    explicit ReturnStmt(SrcLocationId location, NodeId inner)
+    explicit ReturnStmt(SrcLocationId location, NodeId inner = NodeId::null_id())
         : Stmt{location, NodeKind::Return}, inner{inner} {}
 
     SAME_NODE_KIND_DEF(NodeKind::Return)
@@ -217,4 +419,5 @@ struct BreakStmt : public Stmt {
 
 }; // namespace stc::jl
 
+#undef ASSERT_NOT_NULL
 #undef SAME_NODE_KIND_DEF

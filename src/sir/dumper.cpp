@@ -55,7 +55,7 @@ bool SIRDumper::pre_visit_id(NodeId node_id) {
     NodeBase* node = ctx.get_node(node_id);
 
     out << indent() << '[' << std::format("{:p}", static_cast<void*>(ctx.get_node(node_id))) << "|"
-        << node_id << '|'
+        << node_id.id_value() << '|'
         << (node != nullptr ? std::to_string(static_cast<uint8_t>(node->kind())) : "?") << "]\n";
 
     Expr* expr = ctx.get_and_dyn_cast<Expr>(node_id);
@@ -83,10 +83,16 @@ void SIRDumper::visit_FunctionDecl(FunctionDecl& fn_decl) {
     out << indent() << "FunctionDecl: '" << ctx.get_sym(fn_decl.identifier) << "' -> "
         << type_str(fn_decl.return_type) << '\n';
 
+    out << indent() << dump_label("args");
     inc_indent();
     for (NodeId param : fn_decl.param_decls) {
         visit(param);
     }
+    dec_indent();
+
+    out << indent() << dump_label("body");
+    inc_indent();
+    visit(fn_decl.body);
     dec_indent();
 }
 
@@ -209,6 +215,20 @@ void SIRDumper::visit_ExplicitCast(ExplicitCast& expl_cast) {
     dec_indent();
 }
 
+void SIRDumper::visit_Assignment(Assignment& assign) {
+    out << indent() << "Assignment: \n";
+
+    out << indent() << dump_label("target");
+    inc_indent();
+    visit(assign.target);
+    dec_indent();
+
+    out << indent() << dump_label("value");
+    inc_indent();
+    visit(assign.target);
+    dec_indent();
+}
+
 void SIRDumper::visit_FunctionCall(FunctionCall& fn_call) {
     out << indent() << "FunctionCall: '" << ctx.get_sym(fn_call.fn_name) << "'\n";
 
@@ -224,7 +244,7 @@ void SIRDumper::visit_DeclRefExpr(DeclRefExpr& decl_ref) {
     Decl* decl = dyn_cast<Decl>(node);
     assert(decl != nullptr && "decl ref expr points to nullptr, or a non-decl node");
 
-    out << indent() << "DeclRefExpr to '" << ctx.get_sym(decl->identifier) << "'\n";
+    out << indent() << "DeclRefExpr: '" << ctx.get_sym(decl->identifier) << "'\n";
 }
 
 void SIRDumper::visit_ScopedStmt(ScopedStmt& scoped_stmt) {

@@ -145,15 +145,6 @@ struct VarDecl : public Decl {
     SAME_NODE_KIND_DEF(NodeKind::VarDecl)
 };
 
-struct ParamDecl : public Decl {
-    TypeId param_type;
-
-    explicit ParamDecl(SrcLocationId location, SymbolId param_name, TypeId type)
-        : Decl{location, NodeKind::ParamDecl, param_name}, param_type{type} {}
-
-    SAME_NODE_KIND_DEF(NodeKind::ParamDecl)
-};
-
 struct FunctionDecl : public Decl {
     TypeId return_type;
     std::vector<NodeId> param_decls;
@@ -169,13 +160,13 @@ struct FunctionDecl : public Decl {
     SAME_NODE_KIND_DEF(NodeKind::FuncDecl)
 };
 
-struct FieldDecl : public Decl {
-    TypeId field_type;
+struct ParamDecl : public Decl {
+    TypeId param_type;
 
-    explicit FieldDecl(SrcLocationId location, SymbolId field_name, TypeId field_type)
-        : Decl{location, NodeKind::FieldDecl, field_name}, field_type{field_type} {}
+    explicit ParamDecl(SrcLocationId location, SymbolId param_name, TypeId type)
+        : Decl{location, NodeKind::ParamDecl, param_name}, param_type{type} {}
 
-    SAME_NODE_KIND_DEF(NodeKind::FieldDecl)
+    SAME_NODE_KIND_DEF(NodeKind::ParamDecl)
 };
 
 struct StructDecl : public Decl {
@@ -186,6 +177,15 @@ struct StructDecl : public Decl {
         : Decl{location, NodeKind::StructDecl, struct_name}, field_decls{std::move(field_decls)} {}
 
     SAME_NODE_KIND_DEF(NodeKind::StructDecl)
+};
+
+struct FieldDecl : public Decl {
+    TypeId field_type;
+
+    explicit FieldDecl(SrcLocationId location, SymbolId field_name, TypeId field_type)
+        : Decl{location, NodeKind::FieldDecl, field_name}, field_type{field_type} {}
+
+    SAME_NODE_KIND_DEF(NodeKind::FieldDecl)
 };
 
 // ===============
@@ -206,7 +206,7 @@ struct Expr : public Stmt {
     TypeId type() const { return static_cast<TypeId::id_type>((_node_storage >> 8) & 0x0000FFFF); }
     uint8_t node_storage() const { return static_cast<uint8_t>(_node_storage & 0xFF); }
 
-    void set_type(TypeId id) { _node_storage = pack_to_u32(id, node_storage()); }
+    void set_type(TypeId id) { _node_storage = 0x00FFFFFF & pack_to_u32(id, node_storage()); }
 
     static bool same_node_kind(NodeKind kind) {
         return NodeKind::FirstExpr <= kind && kind <= NodeKind::LastExpr;
@@ -293,6 +293,15 @@ struct ScopedExpr : public Expr {
         : Expr{location, NodeKind::ScopedExpr}, inner{inner} {}
 
     SAME_NODE_KIND_DEF(NodeKind::ScopedExpr)
+};
+
+struct Assignment : public Expr {
+    NodeId target, value;
+
+    explicit Assignment(SrcLocationId location, NodeId target, NodeId value)
+        : Expr{location, NodeKind::Assignment}, target{target}, value{value} {}
+
+    SAME_NODE_KIND_DEF(NodeKind::Assignment)
 };
 
 struct BinaryOp : public Expr {

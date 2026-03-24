@@ -1,9 +1,39 @@
 #include "frontend/jl/dumper.h"
 
+namespace {
+
+using VDeclScope = stc::jl::VarDecl::VDeclScope;
+
+std::string scope_str(VDeclScope scope) {
+    switch (scope) {
+        case VDeclScope::global:
+            return "global";
+
+        case VDeclScope::local:
+            return "local";
+
+        case VDeclScope::unspec:
+            return "unspecified scope";
+    }
+
+    throw std::logic_error{"Unaccounted VarDecl scope in switch"};
+}
+
+} // namespace
+
 namespace stc::jl {
 
 std::string JLDumper::type_str(TypeId type_id) const {
     return to_string(type_id, ctx.type_pool, ctx.sym_pool);
+}
+
+std::string_view JLDumper::sym(SymbolId sym_id) const {
+    auto sv = ctx.sym_pool.get_symbol_maybe(sym_id);
+
+    if (!sv.has_value())
+        return "<unknown symbol>";
+
+    return *sv;
 }
 
 std::string JLDumper::indent() const {
@@ -23,8 +53,7 @@ void JLDumper::dec_indent(size_t level) {
 bool JLDumper::pre_visit_id(NodeId node_id) {
     Expr* node = ctx.get_node(node_id);
 
-    out << indent() << '[' << std::format("{:p}", static_cast<void*>(node)) << "|"
-        << std::to_string(node_id) << '|'
+    out << indent() << '[' << std::format("{:p}|{}|", static_cast<void*>(node), node_id.id_value())
         << (node != nullptr ? std::to_string(static_cast<uint8_t>(node->kind())) : "?") << "]\n";
 
     if (node != nullptr)
@@ -49,6 +78,61 @@ bool JLDumper::pre_visit_ptr(Expr* expr) {
     return true;
 }
 
+void JLDumper::visit_VarDecl(VarDecl& var) {
+    out << indent() << "VarDecl (" << scope_str(var.scope()) << "): " << sym(var.identifier)
+        << " <: " << type_str(var.type) << '\n';
+
+    if (!var.initializer.is_null()) {
+        out << indent() << dump_label("initializer");
+        inc_indent();
+        visit(var.initializer);
+        dec_indent();
+    }
+}
+
+void JLDumper::visit_FunctionDecl(FunctionDecl& fn) {
+    out << indent() << "FunctionDecl: " << sym(fn.identifier) << " -> " << type_str(fn.ret_type)
+        << '\n';
+
+    out << indent() << dump_label("args");
+    inc_indent();
+    for (NodeId param : fn.param_decls)
+        visit(param);
+    dec_indent();
+
+    out << indent() << dump_label("body");
+    inc_indent();
+    visit(fn.body);
+    dec_indent();
+}
+
+void JLDumper::visit_ParamDecl(ParamDecl& param) {
+    out << indent() << "ParamDecl: " << sym(param.identifier) << " <: " << type_str(param.type)
+        << '\n';
+
+    if (!param.default_initializer.is_null()) {
+        out << indent() << dump_label("default initializer");
+        inc_indent();
+        visit(param.default_initializer);
+        dec_indent();
+    }
+}
+
+void JLDumper::visit_StructDecl(StructDecl& struct_) {
+    out << indent() << "StructDecl: " << sym(struct_.identifier);
+
+    out << indent() << dump_label("fields");
+    inc_indent();
+    for (NodeId field : struct_.field_decls)
+        visit(field);
+    dec_indent();
+}
+
+void JLDumper::visit_FieldDecl(FieldDecl& field) {
+    out << indent() << "FieldDecl: " << sym(field.identifier) << " <: " << type_str(field.type)
+        << '\n';
+}
+
 void JLDumper::visit_CompoundExpr(CompoundExpr& cmpd) {
     out << indent() << "CompoundExpr:\n";
 
@@ -66,7 +150,7 @@ void JLDumper::visit_BoolLiteral(BoolLiteral& bool_lit) {
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                               \
     void JLDumper::visit_##type(type& lit) {                                                       \
         out << indent() << #type << ": " << lit.value << #suffix << '\n';                          \
-    } // namespace stc::jl
+    }
 
 #define GEN_UINT_LITERAL_VISITOR(type, width)                                                      \
     /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                               \
@@ -98,7 +182,41 @@ void JLDumper::visit_StringLiteral(StringLiteral& lit) {
 }
 
 void JLDumper::visit_SymbolLiteral(SymbolLiteral& lit) {
-    out << indent() << "SymbolLiteral: :(" << ctx.get_sym(lit.value) << ")\n";
+    out << indent() << "SymbolLiteral: :(" << sym(lit.value) << ")\n";
+}
+
+void JLDumper::visit_OpaqueValue(OpaqueValue& opaq) {
+    out << indent() << "OpaqueValue: " << opaq.jl_value << " (" << sym(opaq.jl_type_name) << ")\n";
+}
+
+void JLDumper::visit_GlobalRef(GlobalRef& ref) {
+    out << indent() << "GlobalRef: " << sym(ref.sym_name) << " in module #"
+        << std::to_string(ref.module.value);
+}
+
+void JLDumper::visit_DeclRefExpr(DeclRefExpr& dre) {
+    out << indent() << "DeclRefExpr: ";
+
+    if (Decl* decl = ctx.get_and_dyn_cast<Decl>(dre.decl))
+        out << "resolved, '" << sym(decl->identifier) << "'\n";
+    else if (SymbolLiteral* sym_lit = ctx.get_and_dyn_cast<SymbolLiteral>(dre.decl))
+        out << "unresolved, :" << sym(sym_lit->value) << '\n';
+
+    assert("decl ref expr pointing to non-decl, non-symbol node type");
+}
+
+void JLDumper::visit_Assignment(Assignment& assign) {
+    out << indent() << "Assignment: \n";
+
+    out << indent() << dump_label("target");
+    inc_indent();
+    visit(assign.target);
+    dec_indent();
+
+    out << indent() << dump_label("value");
+    inc_indent();
+    visit(assign.value);
+    dec_indent();
 }
 
 // CLEANUP: pretty printing for target_fn isa Symbol case

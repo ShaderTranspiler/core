@@ -1,5 +1,6 @@
 #pragma once
 
+// TODO: get lib api in shape
 #if false
     #ifndef STC_API
 
@@ -20,4 +21,12 @@
     #endif
 #else
     #define STC_API
+#endif
+
+#if defined(_MSC_VER)
+    #define STC_FORCE_INLINE __forceinline inline
+#elif defined(__GNUC__) || defined(__clang__)
+    #define STC_FORCE_INLINE __attribute__((always_inline)) inline
+#else
+    #define STC_FORCE_INLINE inline
 #endif

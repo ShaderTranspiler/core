@@ -29,7 +29,7 @@ SymbolId SymbolPool::get_id(std::string_view symbol_value) {
 
 std::string_view SymbolPool::get_symbol(SymbolId id) const {
     assert(!id.is_null() && "lookup of null symbol id");
-    assert(arena.get_ptr<char>(id) != nullptr && "lookup of symbol id not present in pool");
+    assert(has_id(id) && "lookup of symbol id not present in pool");
 
     char* data_ptr = arena.get_ptr<char>(id);
 

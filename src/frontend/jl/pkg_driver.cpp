@@ -1,6 +1,8 @@
 #include <cstring>
 #include <iostream>
 
+#include "frontend/jl/dumper.h"
+#include "frontend/jl/parser.h"
 #include "frontend/jl/pkg_driver.h"
 
 // NOLINTBEGIN
@@ -57,6 +59,22 @@ extern "C" STC_API const char* stc_jl_print_expr(jl_value_t* expr_val) noexcept 
     } catch (...) {
         std::cerr << "Unknown error occured during C++ execution\n";
         return nullptr;
+    }
+}
+
+extern "C" STC_API void stc_jl_parse_expr(jl_value_t* expr) noexcept {
+    if (!jl_is_expr(expr))
+        return;
+
+    try {
+        JLParser parser{};
+        NodeId ast = parser.parse(expr);
+        JLCtx jl_ctx{parser.steal_ctx()};
+
+        JLDumper dumper{jl_ctx, std::cout};
+        dumper.visit(ast);
+    } catch (std::exception& ex) {
+        std::cerr << "a parser error occured:\n" << ex.what() << '\n';
     }
 }
 

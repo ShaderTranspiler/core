@@ -36,6 +36,46 @@ SIRNodeId JLLoweringVisitor::visit_ptr(Expr* node) {
     return this->dispatch_wrapper(node);
 }
 
+SIRNodeId JLLoweringVisitor::visit_VarDecl(VarDecl& var) {
+    SIRNodeId init =
+        !var.initializer.is_null() ? visit_and_check(var.initializer) : SIRNodeId::null_id();
+
+    return emplace_node<sir::VarDecl>(var.location, var.identifier, var.type, init);
+}
+
+SIRNodeId JLLoweringVisitor::visit_FunctionDecl(FunctionDecl& fn) {
+    std::vector<SIRNodeId> params;
+    params.reserve(fn.param_decls.size());
+
+    for (NodeId param : fn.param_decls)
+        params.push_back(visit_and_check(param));
+
+    SIRNodeId body = visit_and_check(fn.body);
+
+    return emplace_node<sir::FunctionDecl>(fn.location, fn.identifier, fn.ret_type,
+                                           std::move(params), body);
+}
+
+SIRNodeId JLLoweringVisitor::visit_ParamDecl(ParamDecl& param) {
+    assert(param.default_initializer.is_null() && "param with default value not caught by sema");
+
+    return emplace_node<sir::ParamDecl>(param.location, param.identifier, param.type);
+}
+
+SIRNodeId JLLoweringVisitor::visit_StructDecl(StructDecl& struct_) {
+    std::vector<SIRNodeId> fields;
+    fields.reserve(struct_.field_decls.size());
+
+    for (NodeId field : struct_.field_decls)
+        fields.push_back(visit_and_check(field));
+
+    return emplace_node<sir::StructDecl>(struct_.location, struct_.identifier, std::move(fields));
+}
+
+SIRNodeId JLLoweringVisitor::visit_FieldDecl(FieldDecl& field) {
+    return emplace_node<sir::FieldDecl>(field.location, field.identifier, field.type);
+}
+
 SIRNodeId JLLoweringVisitor::visit_CompoundExpr(CompoundExpr& cmpd) {
     std::vector<SIRNodeId> sir_nodes;
     sir_nodes.reserve(cmpd.body.size());
@@ -92,11 +132,45 @@ SIRNodeId JLLoweringVisitor::visit_SymbolLiteral([[maybe_unused]] SymbolLiteral&
     throw std::logic_error{"using unimplemented feature: decl lookup"};
 }
 
+SIRNodeId JLLoweringVisitor::visit_OpaqueValue([[maybe_unused]] OpaqueValue& opaq) {
+    internal_error("OpaqueValue node not caught by sema");
+    success = false;
+    return SIRNodeId::null_id();
+}
+
+SIRNodeId JLLoweringVisitor::visit_GlobalRef([[maybe_unused]] GlobalRef& gref) {
+    throw std::logic_error{"using unimplemented feature: global refs"};
+}
+
+SIRNodeId JLLoweringVisitor::visit_DeclRefExpr([[maybe_unused]] DeclRefExpr& dre) {
+    // TODO
+    throw std::logic_error{"using unimplemented feature: decl lookup"};
+}
+
+SIRNodeId JLLoweringVisitor::visit_Assignment(Assignment& assign) {
+    return emplace_node<sir::Assignment>(assign.location, visit_and_check(assign.target),
+                                         visit_and_check(assign.value));
+}
+
 SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     auto* sym_lit = ctx.get_and_dyn_cast<SymbolLiteral>(fn_call.target_fn);
 
     if (sym_lit == nullptr)
         return fail("non symbol literal node in FunctionCall's target_fn not caught by sema");
+
+    auto make_binop = [&fn_call, this](sir::BinaryOp::OpKind kind) -> SIRNodeId {
+        return emplace_node<sir::BinaryOp>(fn_call.location, kind, visit_and_check(fn_call.args[0]),
+                                           visit_and_check(fn_call.args[1]));
+    };
+
+    if (fn_call.args.size() == 2) {
+        if (sym_lit->value == sym_plus)
+            return make_binop(sir::BinaryOp::OpKind::add);
+        else if (sym_lit->value == sym_minus)
+            return make_binop(sir::BinaryOp::OpKind::sub);
+        else if (sym_lit->value == sym_asterisk)
+            return make_binop(sir::BinaryOp::OpKind::mul);
+    }
 
     std::vector<SIRNodeId> args{};
     args.reserve(fn_call.args.size());

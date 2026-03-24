@@ -217,6 +217,12 @@ void GLSLCodeGenVisitor::visit_ExplicitCast(ExplicitCast& cast) {
     out << ')';
 }
 
+void GLSLCodeGenVisitor::visit_Assignment(Assignment& assign) {
+    visit(assign.target);
+    out << " = ";
+    visit(assign.value);
+}
+
 void GLSLCodeGenVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     out << ctx.get_sym(fn_call.fn_name) << '(';
 

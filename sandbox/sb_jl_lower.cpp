@@ -2,6 +2,7 @@
 #include <common/literals.h>
 #include <frontend/jl/dumper.h>
 #include <frontend/jl/lowering.h>
+#include <frontend/jl/parser.h>
 #include <iostream>
 #include <sir/dumper.h>
 #include <sir/sema.h>
@@ -12,7 +13,8 @@ int main() { // NOLINT
     using namespace jl;
 
     JLCtx ctx{};
-    SrcLocationId loc{0};
+    std::ignore       = ctx.src_info_pool.get_file("fake_file.jl");
+    SrcLocationId loc = ctx.src_info_pool.get_location(1, 1);
 
     // NOLINTBEGIN
     auto lit1 = ctx.emplace_node<Int32Literal>(loc, 10).first;

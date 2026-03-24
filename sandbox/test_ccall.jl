@@ -1,6 +1,9 @@
 using Libdl
 
-const LIB_PATH = joinpath(@__DIR__, "..", "build-rel", "lib", "libSTC.so")
+# ! REMINDER
+# in the real pkg, the transpile ccall will have to be wrapped in GC.@preserve
+
+const LIB_PATH = joinpath(@__DIR__, "..", "build", "vscode", "lib", "libstc_lib.dll")
 
 cpp_free(ptr) = ccall((:stc_jl_free, LIB_PATH), Cvoid, (Ptr{Cvoid},), ptr)
 
@@ -19,12 +22,33 @@ function test_call(input_expr)
     return str
 end
 
-test_call(:(
-    if x == 0
-        println("x is zero")
-    elseif x < 0
-        println("x is less than zero")
+function cpp_dump(expr::Expr)
+    ccall((:stc_jl_parse_expr, LIB_PATH), Cvoid, (Any,), expr)
+end
+
+# test_call(:(
+#     if x == 0
+#         println("x is zero")
+#     elseif x < 0
+#         println("x is less than zero")
+#     else
+#         println("x is greater than zero")
+#     end
+# ))
+
+@time cpp_dump(quote
+    some_fn(2)
+    some_fn(3)
+    a = 4
+
+    global x::Int = 2
+    local y
+
+    if x
+        println("true")
+    elseif y
+        println("maybe")
     else
-        println("x is greater than zero")
+        println("false")
     end
-))
+end)

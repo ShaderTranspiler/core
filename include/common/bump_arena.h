@@ -172,7 +172,6 @@ public:
         const auto& last_accessed = slabs[last_slab_hint];
         assert(last_accessed != nullptr);
 
-        // TODO: profile marking as [[likely]] vs not
         if (last_accessed->contains_offset(offset)) [[likely]]
             return last_accessed->offset_to_ptr(offset);
 

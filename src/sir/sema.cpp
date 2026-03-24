@@ -277,6 +277,12 @@ void SIRSemaVisitor::visit_ExplicitCast(ExplicitCast& expl_cast) {
     visit(expl_cast.inner);
 }
 
+void SIRSemaVisitor::visit_Assignment(Assignment& assignment) {
+    // TODO: l-value, r-value
+    visit(assignment.target);
+    visit(assignment.value);
+}
+
 void SIRSemaVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     for (auto arg : fn_call.args)
         visit(arg);

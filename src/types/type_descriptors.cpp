@@ -120,7 +120,7 @@ std::string to_string(const TypeDescriptor& type, const TypePool& type_pool,
 
 std::string to_string(TypeId type_id, const TypePool& type_pool, const SymbolPool& sym_pool) {
     if (type_id.is_null())
-        return "? {null id}";
+        return "?";
 
     return to_string(type_pool.get_td(type_id), type_pool, sym_pool);
 }
