@@ -61,7 +61,7 @@ void JLScope::dump(const JLCtx& ctx, std::ostream& out) const {
 
     out << "\n\ndeferred methods:\n";
 
-    for (NodeId method_decl : methods)
+    for (NodeId method_decl : deferred_method_queue)
         dumper.visit(method_decl);
 
     out << "\n==============================\n";

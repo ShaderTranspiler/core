@@ -4,8 +4,9 @@
 
 namespace stc {
 
-// NOTE: although this was designed to be usable both on its own, and for STL containers, it has not
-// NOTE: been properly tested with them yet
+// NOTE:
+// although this was designed to be usable both on its own, and for STL containers, it has not been
+// properly tested with them yet
 template <std::unsigned_integral SizeTy, typename T>
 class BumpArenaAllocator final {
 public:

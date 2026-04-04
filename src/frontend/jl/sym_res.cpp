@@ -40,14 +40,19 @@ bool SymbolRes::finalize() {
         if (infer_src == ScopeInferSrc::Decl) {
             assert((isa<VarDecl, MethodDecl, ParamDecl>(expr)));
 
-            if (auto* vdecl = dyn_cast<VarDecl>(expr))
-                inferred_binding =
-                    vdecl->scope() == ScopeType::Global ? BindingType::Global : BindingType::Local;
-            else {
+            if (auto* vdecl = dyn_cast<VarDecl>(expr)) {
+                assert(vdecl->scope() != MaybeScopeType::Unspec);
+
+                inferred_binding = mst_to_st(vdecl->scope()) == ScopeType::Global
+                                       ? BindingType::Global
+                                       : BindingType::Local;
+            } else {
                 assert((isa<MethodDecl, ParamDecl>(expr)));
                 inferred_binding = BindingType::Local;
             }
         } else {
+            assert(!(isa<Decl>(expr)));
+
             auto it = std::find_if(scopes.rbegin(), scopes.rend(), [sym](JLScope& scope) -> bool {
                 return scope.bt_contains(sym);
             });
@@ -145,6 +150,16 @@ void SymbolRes::visit_MethodDecl(MethodDecl& mdecl) {
     }
 
     try_register(mdecl.identifier, mdecl, ScopeInferSrc::Decl);
+
+    assert(!scopes.empty());
+    JLScope& scope = scopes.back();
+
+    auto it = scope.local_fn_table.find(mdecl.identifier);
+    if (it == scope.local_fn_table.end())
+        scope.local_fn_table.try_emplace(mdecl.identifier, std::vector{{&mdecl}},
+                                         LFTEntry::State::Unresolved);
+    else
+        it->second.method_decls.emplace_back(&mdecl);
 }
 
 EMPTY_VISITOR_DEF(FunctionDecl)

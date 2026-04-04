@@ -5,7 +5,6 @@
 
 namespace stc::glsl {
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 std::string type_str(const TypeDescriptor& td, const TypePool& type_pool,
                      const SymbolPool& sym_pool) {
     if (td.is<VoidTD>())
@@ -16,7 +15,7 @@ std::string type_str(const TypeDescriptor& td, const TypePool& type_pool,
 
     if (td.is<IntTD>()) {
         auto [width, is_signed] = td.as<IntTD>();
-        assert(width == 32 && "invalid glsl int width");
+        assert((width == 32 || width == 64) && "invalid glsl int width");
 
         return is_signed ? "int" : "uint";
     }
@@ -70,7 +69,18 @@ std::string type_str(const TypeDescriptor& td, const TypePool& type_pool,
         return std::string{sym_pool.get_symbol(data_ptr->name)};
     }
 
+    if (td.is_function() || td.is_method()) {
+        error("trying to get GLSL string representation for function or method type");
+        return "?";
+    }
+
+    if (td.is_builtin()) {
+        error("trying to get GLSL string representation for non-GLSL builtin type");
+        return "?";
+    }
+
     assert(false && "missing type case in glsl code gen's type_str");
+    error("trying to get GLSL string representation for unknown type kind");
     return "?";
 }
 

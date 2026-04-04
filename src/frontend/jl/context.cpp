@@ -2,11 +2,13 @@
 
 namespace stc::jl {
 
-// NOLINTBEGIN(readability-function-cognitive-complexity)
 void JLCtx::init_jl_types() {
     _jl_Bool_t    = type_pool.bool_td();
+    _jl_Int8_t    = type_pool.int_td(8, true);
+    _jl_Int16_t   = type_pool.int_td(16, true);
     _jl_Int32_t   = type_pool.int_td(32, true);
     _jl_Int64_t   = type_pool.int_td(64, true);
+    _jl_Int128_t  = type_pool.int_td(128, true);
     _jl_UInt8_t   = type_pool.int_td(8, false);
     _jl_UInt16_t  = type_pool.int_td(16, false);
     _jl_UInt32_t  = type_pool.int_td(32, false);
@@ -26,6 +28,5 @@ void JLCtx::init_jl_types() {
     // #undef X
     // // clang-format on
 }
-// NOLINTEND(readability-function-cognitive-complexity)
 
 } // namespace stc::jl

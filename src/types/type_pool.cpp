@@ -135,7 +135,7 @@ TypeId TypePool::make_struct_td(SymbolId name, std::vector<StructData::FieldInfo
         }))
         throw std::logic_error{"Cannot create struct type with an empty field name"};
 
-    if (has_duplicates(fields, [](const StructData::FieldInfo& fi) -> SymbolId { return fi.name; }))
+    if (has_duplicates(fields, [](const auto& fi) { return fi.name; }))
         throw std::logic_error{"Field names have to be unique inside structs"};
 
     if (struct_map.contains(name))

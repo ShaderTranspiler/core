@@ -9,6 +9,11 @@ using SIRNodeId = stc::sir::NodeId;
 
 namespace stc::jl {
 
+bool JLLoweringVisitor::pre_visit_ptr(Expr* expr) {
+    swap_lower_type(expr->type);
+    return true;
+}
+
 SIRNodeId JLLoweringVisitor::visit_default_case() {
     internal_error("nullptr found in the Julia AST during lowering to SIR");
     this->success = false;
@@ -17,7 +22,13 @@ SIRNodeId JLLoweringVisitor::visit_default_case() {
 }
 
 SIRNodeId JLLoweringVisitor::fail(std::string_view msg) {
-    internal_error(msg);
+    stc::error(msg);
+    success = false;
+    return SIRNodeId::null_id();
+}
+
+SIRNodeId JLLoweringVisitor::internal_error(std::string_view msg) {
+    stc::internal_error(msg);
     success = false;
     return SIRNodeId::null_id();
 }
@@ -26,7 +37,7 @@ SIRNodeId JLLoweringVisitor::visit_and_check(NodeId id) {
     SIRNodeId result = visit(id);
 
     if (result.is_null())
-        return fail("null_id returned by a node in the Julia -> SIR lowering visitor.");
+        return internal_error("null_id returned by a node in the Julia -> SIR lowering visitor.");
 
     return result;
 }
@@ -35,7 +46,48 @@ SIRNodeId JLLoweringVisitor::visit_ptr(Expr* node) {
     return this->dispatch_wrapper(node);
 }
 
+SIRNodeId JLLoweringVisitor::lower(NodeId global_cmpd_id) {
+    auto* global_cmpd = ctx.get_and_dyn_cast<CompoundExpr>(global_cmpd_id);
+    if (global_cmpd == nullptr)
+        return internal_error(
+            "Null id passed to Julia -> SIR lowering pass as the global scope body");
+
+    auto& body = global_cmpd->body;
+
+    // lift global method decls to top
+    std::stable_partition(body.begin(), body.end(),
+                          [this](NodeId expr) -> bool { return this->ctx.isa<MethodDecl>(expr); });
+
+    // wrap rest in a main function
+    size_t body_first_idx = 0;
+    while (body_first_idx < body.size() && ctx.isa<MethodDecl>(body[body_first_idx]))
+        body_first_idx++;
+
+    if (body_first_idx >= body.size())
+        return visit(global_cmpd);
+
+    SrcLocationId main_loc = ctx.get_node(body[body_first_idx])->location;
+
+    std::vector<NodeId> main_body{};
+    main_body.reserve(body.size() - body_first_idx);
+    main_body.insert(main_body.end(), body.begin() + body_first_idx, body.end());
+    body.resize(body_first_idx); // leave one for the main method's decl
+
+    NodeId main_cmpd = ctx.emplace_node<CompoundExpr>(main_loc, std::move(main_body)).first;
+
+    NodeId main_method =
+        ctx.emplace_node<MethodDecl>(main_loc, sir_ctx.sym_pool.get_id("main"), ctx.jl_Nothing_t(),
+                                     std::vector<NodeId>{}, main_cmpd)
+            .first;
+
+    body.emplace_back(main_method);
+
+    return visit(global_cmpd);
+}
+
 SIRNodeId JLLoweringVisitor::visit_VarDecl(VarDecl& var) {
+    swap_lower_type(var.annot_type);
+
     SIRNodeId init =
         !var.initializer.is_null() ? visit_and_check(var.initializer) : SIRNodeId::null_id();
 
@@ -51,8 +103,14 @@ SIRNodeId JLLoweringVisitor::visit_MethodDecl(MethodDecl& method) {
 
     SIRNodeId body = visit_and_check(method.body);
 
+    SIRNodeId scoped_body = emplace_node<sir::ScopedStmt>(sir_ctx.get_node(body)->location, body);
+
+    // TODO: wrap last expr in return if not
+
+    swap_lower_type(method.ret_type);
+
     return emplace_decl<sir::FunctionDecl>(&method, method.location, method.identifier,
-                                           method.ret_type, std::move(params), body);
+                                           method.ret_type, std::move(params), scoped_body);
 }
 
 SIRNodeId JLLoweringVisitor::visit_FunctionDecl(FunctionDecl& fn) {
@@ -66,7 +124,10 @@ SIRNodeId JLLoweringVisitor::visit_FunctionDecl(FunctionDecl& fn) {
 }
 
 SIRNodeId JLLoweringVisitor::visit_ParamDecl(ParamDecl& param) {
-    assert(param.default_initializer.is_null() && "param with default value not caught by sema");
+    if (!param.default_initializer.is_null())
+        return fail("default initialized parameters are currently not supported");
+
+    swap_lower_type(param.annot_type);
 
     return emplace_decl<sir::ParamDecl>(&param, param.location, param.identifier, param.type);
 }
@@ -120,7 +181,7 @@ GEN_INT_LITERAL_VISITOR(UInt32Literal, 32, false)
 GEN_INT_LITERAL_VISITOR(UInt64Literal, 64, false)
 
 SIRNodeId JLLoweringVisitor::visit_UInt128Literal([[maybe_unused]] UInt128Literal& lit) {
-    return fail("unsupported UInt128 literal node not caught by sema");
+    return internal_error("unsupported UInt128 literal node not caught by sema");
 }
 
 SIRNodeId JLLoweringVisitor::visit_Float32Literal(Float32Literal& lit) {
@@ -134,7 +195,7 @@ SIRNodeId JLLoweringVisitor::visit_Float64Literal(Float64Literal& lit) {
 }
 
 SIRNodeId JLLoweringVisitor::visit_StringLiteral([[maybe_unused]] StringLiteral& lit) {
-    return fail("unsupported String literal node not caught by sema");
+    return internal_error("unsupported String literal node not caught by sema");
 }
 
 SIRNodeId JLLoweringVisitor::visit_SymbolLiteral([[maybe_unused]] SymbolLiteral& lit) {
@@ -147,7 +208,7 @@ SIRNodeId JLLoweringVisitor::visit_NothingLiteral([[maybe_unused]] NothingLitera
 }
 
 SIRNodeId JLLoweringVisitor::visit_OpaqueNode([[maybe_unused]] OpaqueNode& opaq) {
-    return fail("OpaqueNode node not caught by sema");
+    return internal_error("OpaqueNode node not caught by sema");
 }
 
 SIRNodeId JLLoweringVisitor::visit_GlobalRef([[maybe_unused]] GlobalRef& gref) {
@@ -172,15 +233,38 @@ SIRNodeId JLLoweringVisitor::visit_DeclRefExpr(DeclRefExpr& dre) {
 }
 
 SIRNodeId JLLoweringVisitor::visit_Assignment(Assignment& assign) {
+    if (assign.is_implicit_decl()) {
+        auto* dre = ctx.get_and_dyn_cast<DeclRefExpr>(assign.target);
+
+        assert(dre != nullptr && "assignment marked as an implicit declaration, but lhs is not a "
+                                 "declaration reference expression");
+
+        if (!ctx.isa<VarDecl>(dre->decl))
+            throw std::logic_error{
+                "implicitly declaring assignment initializes a non-variable-declaration node"};
+
+        // should only ever return a VarDecl (or maybe a MethodDecl later on)
+        SIRNodeId result = visit_and_check(dre->decl);
+        assert(sir_ctx.isa<sir::VarDecl>(result));
+
+        return result;
+    }
+
     return emplace_node<sir::Assignment>(assign.location, visit_and_check(assign.target),
                                          visit_and_check(assign.value));
 }
 
 SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
-    auto* sym_lit = ctx.get_and_dyn_cast<SymbolLiteral>(fn_call.target_fn);
+    auto* dre = ctx.get_and_dyn_cast<DeclRefExpr>(fn_call.target_fn);
 
-    if (sym_lit == nullptr)
-        return fail("non symbol literal node in FunctionCall's target_fn not caught by sema");
+    if (dre == nullptr)
+        return internal_error(
+            "non-declaration-reference node in FunctionCall's target_fn not caught by sema");
+
+    auto* decl = ctx.get_and_dyn_cast<FunctionDecl>(dre->decl);
+
+    if (decl == nullptr)
+        return internal_error("non-function-declaration-reference in FunctionCall's target_fn");
 
     auto make_binop = [&fn_call, this](sir::BinaryOp::OpKind kind) -> SIRNodeId {
         return emplace_node<sir::BinaryOp>(fn_call.location, kind, visit_and_check(fn_call.args[0]),
@@ -188,11 +272,11 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     };
 
     if (fn_call.args.size() == 2) {
-        if (sym_lit->value == sym_plus)
+        if (decl->identifier == sym_plus)
             return make_binop(sir::BinaryOp::OpKind::add);
-        if (sym_lit->value == sym_minus)
+        if (decl->identifier == sym_minus)
             return make_binop(sir::BinaryOp::OpKind::sub);
-        if (sym_lit->value == sym_asterisk)
+        if (decl->identifier == sym_asterisk)
             return make_binop(sir::BinaryOp::OpKind::mul);
     }
 
@@ -202,7 +286,7 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     for (NodeId arg : fn_call.args)
         args.push_back(visit_and_check(arg));
 
-    return emplace_node<sir::FunctionCall>(fn_call.location, sym_lit->value, std::move(args));
+    return emplace_node<sir::FunctionCall>(fn_call.location, decl->identifier, std::move(args));
 }
 
 SIRNodeId JLLoweringVisitor::visit_IfExpr(IfExpr& if_) {

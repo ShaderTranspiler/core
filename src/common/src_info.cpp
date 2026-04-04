@@ -80,8 +80,13 @@ SrcLocationId SrcInfoPool::get_location(intptr_t line, uint32_t col) {
         return SrcLocationId::null_id();
     }
 
-    auto [id, _ptr] = arena_alloc.emplace(line, col);
-    last_loc_id     = id;
+    // TODO: return interred loc, for same file only
+
+    SrcLocationId id = SrcLocationId::null_id();
+
+    std::tie(id, std::ignore) = arena_alloc.emplace(line, col);
+
+    last_loc_id = id;
     return id;
 }
 

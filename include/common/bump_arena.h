@@ -169,6 +169,7 @@ public:
         if (offset == 0)
             return nullptr;
 
+        assert(last_slab_hint < slabs.size());
         const auto& last_accessed = slabs[last_slab_hint];
         assert(last_accessed != nullptr);
 
@@ -202,6 +203,7 @@ public:
         if (ptr == nullptr)
             return 0U;
 
+        assert(last_slab_hint < slabs.size());
         const auto& last_accessed = slabs[last_slab_hint];
         assert(last_accessed != nullptr);
 

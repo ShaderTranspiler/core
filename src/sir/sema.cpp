@@ -90,6 +90,9 @@ void SIRSemaVisitor::visit_FunctionDecl(FunctionDecl& fn_decl) {
     if (fn_decl.return_type.is_null())
         return error(fn_decl, "invalid function declaration, return type is null");
 
+    if (!fn_decl.body.is_null() && ctx.isa<FunctionDecl>(fn_decl.body))
+        return error(fn_decl, "function definition's body must open a new scope");
+
     expected_ret_type = fn_decl.return_type;
     symbols.emplace_back();
     visit(fn_decl.body);

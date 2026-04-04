@@ -11,6 +11,14 @@
 namespace stc::jl {
 
 class JLParser {
+    JLCtx ctx;
+
+    JLParserTypeCache type_cache{};
+    JLParserSymbolCache sym_cache{};
+
+    SrcLocationId cur_loc;
+    bool _success = true;
+
 public:
     explicit JLParser()
         : ctx{} {
@@ -20,10 +28,16 @@ public:
     }
 
     NodeId parse(jl_value_t* node);
-    NodeId parse_expr(jl_expr_t* expr);
     NodeId parse_code(std::string_view code);
 
+    [[nodiscard]] JLCtx&& steal_ctx() { return std::move(ctx); }
+    bool success() const { return _success; }
+
+private:
+    NodeId parse_expr(jl_expr_t* expr);
+
     PARSER_DECL(var_decl);
+    PARSER_DECL(method_decl);
     PARSER_DECL(assignment);
     PARSER_DECL(block);
     PARSER_DECL(call);
@@ -31,14 +45,9 @@ public:
     PARSER_DECL(while);
     PARSER_DECL(return);
 
-    [[nodiscard]] JLCtx&& steal_ctx() { return std::move(ctx); }
-
-private:
-    JLCtx ctx;
-    SrcLocationId cur_loc;
-
-    JLParserTypeCache type_cache{};
-    JLParserSymbolCache sym_cache{};
+    // helper parser functions, not participating in the regular parse_expr flow
+    std::pair<jl_value_t*, TypeId> parse_type_annotation(jl_expr_t* annot);
+    NodeId parse_param_decl(jl_value_t* param);
 
     template <typename T, typename... Args>
     NodeId emplace_node(Args&&... args) {
@@ -46,6 +55,8 @@ private:
     }
 
     TypeId resolve_type(jl_value_t* type);
+    NodeId error(std::string_view msg, SrcLocationId loc_id = SrcLocationId::null_id());
+    NodeId internal_error(std::string_view msg, SrcLocationId loc_id = SrcLocationId::null_id());
 };
 
 #undef PARSER_DECL

@@ -60,7 +60,7 @@ public:
     }
 
 private:
-    // adds Julia type not already present and assigns them to the _type members
+    // adds Julia type not already present and assigns them to the _<type name> members
     // if types are already inside the pool and the members, this is a no-op
     void init_jl_types();
 

@@ -26,9 +26,9 @@ using unqual_return_t = std::remove_cvref_t<std::invoke_result_t<F, T>>;
 
 } // namespace detail
 
-template <typename T>
-concept CHashable = requires (T a) {
-    { std::hash<T>{}(a) } -> std::same_as<size_t>;
+template <typename T, typename Hasher = std::hash<T>>
+concept CHashable = requires (const T& a) {
+    { Hasher{}(a) } -> std::same_as<size_t>;
 };
 
 template <typename T>
@@ -73,12 +73,12 @@ bool is_power_of_two(T x) {
     return x != 0 && (x & (x - 1)) == 0;
 }
 
-// same as boost's current hash_combine implementation for 32/64-bit size_t:
+// same as boost container_hash's current hash_combine implementation for 32/64-bit size_t:
 // https://www.boost.org/doc/libs/latest/libs/container_hash/doc/html/hash.html#notes_hash_combine
-template <typename T>
-requires CHashable<T>
+template <typename T, typename Hasher = std::hash<T>>
+requires CHashable<T, Hasher>
 constexpr size_t hash_combine(size_t seed, const T& v) {
-    size_t x = seed + 0x9e3779b9 + std::hash<T>{}(v);
+    size_t x = seed + 0x9e3779b9 + Hasher{}(v);
 
     if constexpr (sizeof(size_t) == 8U) {
         x ^= x >> 32;
@@ -114,7 +114,7 @@ struct StrongId {
 
     // to enable truncated static_cast-s without warnings
     template <std::unsigned_integral T>
-    requires (!std::same_as<T, IdTy>)
+    requires (!std::same_as<T, IdTy>) && (!std::same_as<T, bool>)
     constexpr explicit StrongId(T value)
         : value{static_cast<IdTy>(value)} {}
 
@@ -177,6 +177,30 @@ template <typename... Args>
 constexpr bool no_nullptrs(Args*... args) {
     return ((args != nullptr) && ...);
 }
+
+// core idea from:
+// https://tamir.dev/posts/that-overloaded-trick-overloading-lambdas-in-cpp17/
+template <typename... Ts>
+requires (requires { &Ts::operator(); } && ...)
+struct Overloaded : Ts... {
+    using Ts::operator()...;
+};
+
+// util for hashing std::vector<T>-s where T is hashable through an element-wise hash_combine
+// (not included as a std::hash specialization because i dont wanna enable blind hashing capability
+// for vector, only when explicitly requested)
+template <typename T, typename Hasher = std::hash<T>>
+requires CHashable<T, Hasher>
+struct VectorHash {
+    size_t operator()(const std::vector<T>& vec) const noexcept {
+        size_t h = 0;
+
+        for (const T& el : vec)
+            h = hash_combine<T, Hasher>(h, el);
+
+        return h;
+    }
+};
 
 } // namespace stc
 

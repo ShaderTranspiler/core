@@ -228,19 +228,19 @@ struct BoolLiteral : public Expr {
 };
 
 struct IntLiteral : public Expr {
-    std::string data;
+    std::string value;
 
     explicit IntLiteral(SrcLocationId location, TypeId type, std::string data)
-        : Expr{location, NodeKind::IntLit, type}, data{std::move(data)} {}
+        : Expr{location, NodeKind::IntLit, type}, value{std::move(data)} {}
 
     SAME_NODE_KIND_DEF(NodeKind::IntLit)
 };
 
 struct FloatLiteral : public Expr {
-    std::string data;
+    std::string value;
 
     explicit FloatLiteral(SrcLocationId location, TypeId type, std::string data)
-        : Expr{location, NodeKind::FloatLit, type}, data{std::move(data)} {}
+        : Expr{location, NodeKind::FloatLit, type}, value{std::move(data)} {}
 
     SAME_NODE_KIND_DEF(NodeKind::FloatLit)
 };

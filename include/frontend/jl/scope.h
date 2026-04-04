@@ -12,6 +12,16 @@ using SymbolTable = std::unordered_map<SymbolId, NodeId>;
 
 using BindingTable = std::unordered_map<SymbolId, BindingType>;
 
+struct LFTEntry {
+    enum class State : uint8_t { Unresolved, InProgress, Resolved };
+
+    std::vector<MethodDecl*> method_decls;
+    State state;
+};
+
+// fn identifier -> (list of methods, already defined)
+using LocalFunctionTable = std::unordered_map<SymbolId, LFTEntry>;
+
 struct JLScope {
     ScopeKind kind;
     CompoundExpr& body;
@@ -22,9 +32,10 @@ struct JLScope {
     // this info is then used when building the symbol table
     BindingTable binding_table{};
     SymbolTable symbol_table{};
+    LocalFunctionTable local_fn_table{};
 
     // needed for deferred method body visits in sema
-    std::vector<NodeId> methods{};
+    std::vector<NodeId> deferred_method_queue{};
 
     explicit JLScope(ScopeKind kind, CompoundExpr& body)
         : kind{kind}, body{body} {}
@@ -70,10 +81,12 @@ struct JLScope {
     }
 
     void defer_method_body_visit(NodeId method_id) {
-        if (std::find(methods.begin(), methods.end(), method_id) != methods.end())
+        auto& dmq = deferred_method_queue;
+
+        if (std::find(dmq.begin(), dmq.end(), method_id) != dmq.end())
             throw std::logic_error{"Trying to defer visitor for method body already in queue"};
 
-        methods.push_back(method_id);
+        dmq.push_back(method_id);
     }
 
     void dump(const JLCtx& ctx, std::ostream& out = std::cout) const;

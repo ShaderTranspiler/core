@@ -1,5 +1,6 @@
 #pragma once
 
+#include "base.h"
 #include "common/src_info.h"
 #include "common/utils.h"
 #include "frontend/jl/module_pool.h"
@@ -13,9 +14,11 @@
 #define ASSERT_NOT_NULL(id)                                                                        \
     assert(!((id).is_null()) && "trying to init non-nullable id field of AST node with null id")
 
+// moved into a conditional macro so that release builds don't contain empty fors
+// (which would cause compiler warnings)
 #ifndef NDEBUG
     #define ASSERT_CONTAINS_NO_NULL(coll)                                                          \
-        for (auto it : (coll)) {                                                                   \
+        for (const auto& it : (coll)) {                                                            \
             ASSERT_NOT_NULL(it);                                                                   \
         }
 #else
@@ -26,6 +29,29 @@ namespace stc::jl {
 
 enum class ScopeKind : uint8_t { Global, Hard, Soft };
 enum class ScopeType : uint8_t { Global, Local };
+
+// it's good to have this separate for AST nodes, which may or may not specify a scope (e.g. var
+// decls), but not force checking for unspec in sema helpers, where it shouldn't ever be unspec
+enum class MaybeScopeType : uint8_t { Global, Local, Unspec };
+
+static_assert(static_cast<uint8_t>(MaybeScopeType::Global) ==
+              static_cast<uint8_t>(ScopeType::Global));
+static_assert(static_cast<uint8_t>(MaybeScopeType::Local) ==
+              static_cast<uint8_t>(ScopeType::Local));
+
+[[nodiscard]] STC_FORCE_INLINE constexpr ScopeType mst_to_st(MaybeScopeType mst) {
+    if (mst == MaybeScopeType::Unspec)
+        throw std::logic_error{
+            "Trying to convert MaybeBindingType with value Unspec to a ScopeType"};
+
+    assert(mst == MaybeScopeType::Global || mst == MaybeScopeType::Local);
+
+    return static_cast<ScopeType>(static_cast<uint8_t>(mst));
+}
+
+[[nodiscard]] STC_FORCE_INLINE constexpr MaybeScopeType st_to_mst(ScopeType st) {
+    return static_cast<MaybeScopeType>(static_cast<uint8_t>(st));
+}
 
 struct NodeId : public SplitU32Id {
     using SplitU32Id::SplitU32Id;
@@ -91,10 +117,10 @@ struct Expr {
 
 struct Stmt : public Expr {
     explicit Stmt(SrcLocationId location, NodeKind kind, uint8_t node_storage)
-        : Expr{location, kind, TypeId::void_id(), node_storage} {}
+        : Expr{location, kind, node_storage} {}
 
     explicit Stmt(SrcLocationId location, NodeKind kind)
-        : Expr{location, kind, TypeId::void_id()} {}
+        : Expr{location, kind} {}
 
     static bool same_node_kind(NodeKind kind) {
         return NodeKind::FirstStmt <= kind && kind <= NodeKind::LastStmt;
@@ -109,8 +135,9 @@ struct Decl : public Expr {
         ASSERT_NOT_NULL(identifier);
     }
 
-    explicit Decl(SrcLocationId location, NodeKind kind, SymbolId identifier)
-        : Expr{location, kind}, identifier{identifier} {
+    explicit Decl(SrcLocationId location, NodeKind kind, SymbolId identifier,
+                  TypeId type = TypeId::null_id())
+        : Expr{location, kind, type}, identifier{identifier} {
         ASSERT_NOT_NULL(identifier);
     }
 
@@ -124,16 +151,21 @@ struct Decl : public Expr {
 // ================
 
 struct VarDecl : public Decl {
-    TypeId type;
+    TypeId annot_type;
     NodeId initializer;
 
-    explicit VarDecl(SrcLocationId location, SymbolId identifier, TypeId type, ScopeType scope,
-                     NodeId initializer = NodeId::null_id())
+    explicit VarDecl(SrcLocationId location, SymbolId identifier, TypeId annot_type,
+                     MaybeScopeType scope, NodeId initializer = NodeId::null_id())
         : Decl{location, NodeKind::VarDecl, identifier, static_cast<uint8_t>(scope)},
-          type{type},
+          annot_type{annot_type},
           initializer{initializer} {}
 
-    ScopeType scope() const { return static_cast<ScopeType>(_node_storage); }
+    explicit VarDecl(SrcLocationId location, SymbolId identifier, TypeId annot_type,
+                     ScopeType scope, NodeId initializer = NodeId::null_id())
+        : VarDecl{location, identifier, annot_type, st_to_mst(scope), initializer} {}
+
+    MaybeScopeType scope() const { return static_cast<MaybeScopeType>(_node_storage); }
+    void set_scope(MaybeScopeType value) { _node_storage = static_cast<uint8_t>(value); }
 
     SAME_NODE_KIND_DEF(NodeKind::VarDecl)
 };
@@ -144,8 +176,9 @@ struct MethodDecl : public Decl {
     std::vector<NodeId> param_decls;
 
     explicit MethodDecl(SrcLocationId location, SymbolId identifier, TypeId ret_type,
-                        std::vector<NodeId> param_decls, NodeId body)
-        : Decl{location, NodeKind::MethodDecl, identifier},
+                        std::vector<NodeId> param_decls, NodeId body,
+                        bool has_captured_syms = false)
+        : Decl{location, NodeKind::MethodDecl, identifier, static_cast<uint8_t>(has_captured_syms)},
           ret_type{ret_type},
           body{body},
           param_decls{std::move(param_decls)} {
@@ -155,6 +188,9 @@ struct MethodDecl : public Decl {
     }
 
     SAME_NODE_KIND_DEF(NodeKind::MethodDecl)
+
+    void set_has_captured_syms(bool value) { _node_storage = static_cast<uint8_t>(value); }
+    bool has_captured_syms() const { return static_cast<bool>(node_storage()); }
 };
 
 struct FunctionDecl : public Decl {
@@ -170,17 +206,14 @@ struct FunctionDecl : public Decl {
 };
 
 struct ParamDecl : public Decl {
-    TypeId type;
+    TypeId annot_type;
     NodeId default_initializer;
 
-    explicit ParamDecl(SrcLocationId location, SymbolId identifier, TypeId type,
+    explicit ParamDecl(SrcLocationId location, SymbolId identifier, TypeId annot_type,
                        bool is_kwarg = false, NodeId default_initializer = NodeId::null_id())
         : Decl{location, NodeKind::ParamDecl, identifier, static_cast<uint8_t>(is_kwarg)},
-          type{type},
-          default_initializer{default_initializer} {
-
-        ASSERT_NOT_NULL(type);
-    }
+          annot_type{annot_type},
+          default_initializer{default_initializer} {}
 
     bool is_kwarg() const { return static_cast<bool>(_node_storage); }
 
@@ -202,10 +235,8 @@ struct StructDecl : public Decl {
 };
 
 struct FieldDecl : public Decl {
-    TypeId type;
-
     explicit FieldDecl(SrcLocationId location, SymbolId identifier, TypeId type)
-        : Decl{location, NodeKind::FieldDecl, identifier}, type{type} {
+        : Decl{location, NodeKind::FieldDecl, identifier, type} {
 
         ASSERT_NOT_NULL(type);
     }
@@ -266,10 +297,10 @@ using UInt32Literal = detail::IntLiteral<NodeKind::U32Lit, uint32_t>;
 using UInt64Literal = detail::IntLiteral<NodeKind::U64Lit, uint64_t>;
 
 struct UInt128Literal : public Expr {
-    uint64_t high, low;
+    uint64_t hi, lo;
 
-    explicit UInt128Literal(SrcLocationId location, uint64_t high, uint64_t low)
-        : Expr{location, NodeKind::U128Lit}, high{high}, low{low} {}
+    explicit UInt128Literal(SrcLocationId location, uint64_t hi, uint64_t lo)
+        : Expr{location, NodeKind::U128Lit}, hi{hi}, lo{lo} {}
 
     SAME_NODE_KIND_DEF(NodeKind::U128Lit)
 };
@@ -371,12 +402,18 @@ struct DeclRefExpr : public Expr {
 struct Assignment : public Expr {
     NodeId target, value;
 
-    explicit Assignment(SrcLocationId location, NodeId target, NodeId value)
-        : Expr{location, NodeKind::Assignment}, target{target}, value{value} {
+    explicit Assignment(SrcLocationId location, NodeId target, NodeId value,
+                        bool is_implicit_decl = false)
+        : Expr{location, NodeKind::Assignment, static_cast<uint8_t>(is_implicit_decl)},
+          target{target},
+          value{value} {
 
         ASSERT_NOT_NULL(target);
         ASSERT_NOT_NULL(value);
     }
+
+    bool is_implicit_decl() const { return static_cast<bool>(node_storage()); }
+    void set_is_implicit_decl(bool value) { _node_storage = static_cast<uint8_t>(value); }
 
     SAME_NODE_KIND_DEF(NodeKind::Assignment)
 };
@@ -399,6 +436,19 @@ struct FunctionCall : public Expr {
     SAME_NODE_KIND_DEF(NodeKind::FnCall)
 };
 
+struct WhileExpr : public Expr {
+    NodeId condition, body;
+
+    explicit WhileExpr(SrcLocationId location, NodeId condition, NodeId body)
+        : Expr{location, NodeKind::While}, condition{condition}, body{body} {
+
+        ASSERT_NOT_NULL(condition);
+        ASSERT_NOT_NULL(body);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::While)
+};
+
 struct IfExpr : public Expr {
     NodeId condition, true_branch, false_branch;
 
@@ -414,19 +464,6 @@ struct IfExpr : public Expr {
     }
 
     SAME_NODE_KIND_DEF(NodeKind::If)
-};
-
-struct WhileExpr : public Expr {
-    NodeId condition, body;
-
-    explicit WhileExpr(SrcLocationId location, NodeId condition, NodeId body)
-        : Expr{location, NodeKind::While}, condition{condition}, body{body} {
-
-        ASSERT_NOT_NULL(condition);
-        ASSERT_NOT_NULL(body);
-    }
-
-    SAME_NODE_KIND_DEF(NodeKind::While)
 };
 
 // ==============

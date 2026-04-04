@@ -120,11 +120,11 @@ void SIRDumper::visit_BoolLiteral(BoolLiteral& bool_lit) {
 }
 
 void SIRDumper::visit_IntLiteral(IntLiteral& int_lit) {
-    out << indent() << "IntLiteral (" << type_str(int_lit.type()) << "): " << int_lit.data << '\n';
+    out << indent() << "IntLiteral (" << type_str(int_lit.type()) << "): " << int_lit.value << '\n';
 }
 
 void SIRDumper::visit_FloatLiteral(FloatLiteral& float_lit) {
-    out << indent() << "FloatLiteral (" << type_str(float_lit.type()) << "): " << float_lit.data
+    out << indent() << "FloatLiteral (" << type_str(float_lit.type()) << "): " << float_lit.value
         << '\n';
 }
 

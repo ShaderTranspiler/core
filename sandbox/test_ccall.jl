@@ -23,7 +23,9 @@ function test_call(input_expr)
 end
 
 function cpp_dump(expr::Expr)
-    ccall((:stc_jl_parse_expr, LIB_PATH), Cvoid, (Any,), expr)
+    GC.@preserve expr begin
+        ccall((:stc_jl_parse_expr, LIB_PATH), Cvoid, (Any,), expr)
+    end
 end
 
 # test_call(:(

@@ -1,4 +1,4 @@
-#include "julia.h"
+#include <julia.h>
 JULIA_DEFINE_FAST_TLS
 
 #include <backend/glsl/code_gen.h>
@@ -14,42 +14,57 @@ JULIA_DEFINE_FAST_TLS
 #include <iostream>
 #include <sstream>
 
-int main(int argc, char* argv[]) {
+int transpile(std::string_view code, bool dump_parsed, bool dump_sema, bool dump_lowered,
+              bool write_to_file) {
     using namespace stc;
     using namespace stc::jl;
     using clock = std::chrono::steady_clock;
-
-    // ! TODO: remove
-    std::ifstream file(argc > 1 ? argv[1] : "C:\\Users\\szucs\\szakdoga\\stc\\test.jl");
-    std::stringstream code_stream;
-    code_stream << file.rdbuf();
-    std::string code{code_stream.str()};
-
-    jl_init();
 
     auto start = clock::now();
 
     JLParser parser{};
     NodeId jl_ast = parser.parse_code(code);
+
+    if (!parser.success()) {
+        std::cerr << "Julia parser failed" << std::endl;
+        return 1;
+    }
+
     JLCtx ctx{parser.steal_ctx()};
+
+    auto parser_done = clock::now();
+
+    if (dump_parsed) {
+        JLDumper dumper{ctx, std::cout};
+        dumper.visit(jl_ast);
+    }
 
     auto* cmpd = ctx.get_and_dyn_cast<CompoundExpr>(jl_ast);
     if (cmpd == nullptr)
         throw std::logic_error{"outermost node is not a compound expression"};
 
+    auto sema_start = clock::now();
+
     JLSema sema{ctx, *cmpd};
     sema.infer(jl_ast);
+    sema.finalize();
+
+    auto sema_done = clock::now();
 
     if (!sema.success()) {
         std::cerr << "Julia sema failed" << std::endl;
         return 1;
     }
 
-    // JLDumper jl_dumper{ctx, std::cout};
-    // jl_dumper.visit(jl_ast);
+    if (dump_sema) {
+        JLDumper dumper{ctx, std::cout};
+        dumper.visit(jl_ast);
+    }
+
+    auto lowering_start = clock::now();
 
     JLLoweringVisitor lowering{std::move(ctx)};
-    auto sir_ast = lowering.visit(jl_ast);
+    auto sir_ast = lowering.lower(jl_ast);
 
     if (!lowering.successful()) {
         std::cerr << "Julia -> SIR lowering failed" << std::endl;
@@ -57,6 +72,13 @@ int main(int argc, char* argv[]) {
     }
 
     auto glsl_ctx = glsl::GLSLCtx(std::move(lowering.sir_ctx));
+
+    auto lowering_done = clock::now();
+
+    if (dump_lowered) {
+        sir::SIRDumper dumper{glsl_ctx, std::cout};
+        dumper.visit(sir_ast);
+    }
 
     // sir::SIRDumper sir_dumper{glsl_ctx, std::cout};
     // sir_dumper.visit(sir_ast);
@@ -68,6 +90,8 @@ int main(int argc, char* argv[]) {
     //     return 1;
     // }
 
+    auto codegen_start = clock::now();
+
     glsl::GLSLCodeGenVisitor code_gen_vis{glsl_ctx};
     code_gen_vis.visit(sir_ast);
 
@@ -78,12 +102,115 @@ int main(int argc, char* argv[]) {
 
     auto end = clock::now();
 
-    std::ofstream out_file{"out.comp"};
-    out_file << code_gen_vis.result();
-    out_file.flush();
+    if (write_to_file) {
+        // std::ofstream out_file{"out.comp"};
+        // out_file << code_gen_vis.result();
+        // out_file.flush();
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    std::cout << std::format("\nTranspilation finished in {}\n", duration) << std::endl;
+        // gotta do C-style file writing, cause libjulia messes with std::locale in a way that
+        // breaks std::ofstream in release builds
+
+        FILE* out_file = fopen("out.comp", "w");
+        if (out_file) {
+            const std::string& res = code_gen_vis.result();
+            fwrite(res.data(), 1, res.size(), out_file);
+            fclose(out_file);
+        } else {
+            std::cerr << "failed to open out.comp for writing" << std::endl;
+            return 1;
+        }
+    }
+
+    auto parser_duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(parser_done - start);
+    auto sema_duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(sema_done - sema_start);
+    auto lowering_duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(lowering_done - lowering_start);
+    auto codegen_duration =
+        std::chrono::duration_cast<std::chrono::microseconds>(end - codegen_start);
+    auto overall_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+    std::cout << std::format("\nParser finished in {}\n", parser_duration);
+    std::cout << std::format("Sema finished in {}\n", sema_duration);
+    std::cout << std::format("Lowering finished in {}\n", lowering_duration);
+    std::cout << std::format("Codegen finished in {}\n", codegen_duration);
+    std::cout << std::format("\nEntire transpilation pipeline finished in {}", overall_duration);
+
+    std::cout.flush();
+    return 0;
+}
+
+std::optional<std::size_t> try_parse_size_t(const std::string& str) {
+    size_t value;
+    auto [ptr, err] = std::from_chars(str.data(), str.data() + str.size(), value);
+
+    if (err == std::errc() && ptr == str.data() + str.size())
+        return value;
+
+    return std::nullopt;
+}
+
+int main(int argc, char* argv[]) {
+    using namespace stc;
+    using namespace stc::jl;
+
+    bool dump_parsed  = false;
+    bool dump_sema    = false;
+    bool dump_lowered = false;
+    size_t ite_count  = 1U;
+    for (int i = 2; i < argc; i++) {
+        std::string arg{argv[i]};
+        if (arg == "--dump-parsed")
+            dump_parsed = true;
+        else if (arg == "--dump-sema")
+            dump_sema = true;
+        else if (arg == "--dump-lowered")
+            dump_lowered = true;
+        else if (arg == "--it") {
+            if (i + 1 == argc) {
+                std::cerr << "--it must be followed by the number of iterations";
+                return 1;
+            }
+
+            auto maybe_ite_count = try_parse_size_t(std::string{argv[i + 1]});
+
+            if (!maybe_ite_count.has_value()) {
+                std::cerr << "--it followed by a non-numeric string";
+                return 1;
+            }
+
+            ite_count = *maybe_ite_count;
+            i++;
+        } else {
+            std::cerr << std::format("unknown argument: {}", arg);
+            return 1;
+        }
+    }
+
+    // ! TODO: remove
+    std::ifstream file(argc > 1 ? argv[1] : "C:\\Users\\szucs\\szakdoga\\stc\\test.jl");
+    std::stringstream code_stream;
+    code_stream << file.rdbuf();
+    std::string code{code_stream.str()};
+
+    jl_init();
+
+    for (size_t i = 0; i < ite_count; i++) {
+        std::cout << std::format("\n======================\n"
+                                 "Transpilation #{}\n"
+                                 "======================\n",
+                                 i + 1);
+
+        int result = transpile(code, dump_parsed, dump_sema, dump_lowered, i + 1 == ite_count);
+
+        if (result != 0) {
+            std::cout << "\nAn error occured during transpilation";
+            std::cout.flush();
+            jl_atexit_hook(0);
+            return result;
+        }
+    }
 
     jl_atexit_hook(0);
     return 0;

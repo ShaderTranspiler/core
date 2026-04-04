@@ -84,18 +84,58 @@ STC_FORCE_INLINE jl_expr_t* is_expr(jl_value_t* value, jl_sym_t* head) {
     return expr->head == head ? expr : nullptr;
 }
 
-class jl_parse_error : public std::runtime_error {
-public:
-    using std::runtime_error::runtime_error;
-};
-
 } // namespace
 
 namespace stc::jl {
 
-// TODO
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-TypeId JLParser::resolve_type([[maybe_unused]] jl_value_t* type) {
+TypeId JLParser::resolve_type(jl_value_t* type) {
+    if (jl_is_symbol(type)) {
+        auto* tsym = reinterpret_cast<jl_sym_t*>(type);
+
+        // clang-format off
+        if (tsym == sym_cache.Bool)    return ctx.jl_Bool_t();
+        if (tsym == sym_cache.Int8)    return ctx.jl_Int8_t();
+        if (tsym == sym_cache.Int16)   return ctx.jl_Int16_t();
+        if (tsym == sym_cache.Int32)   return ctx.jl_Int32_t();
+        if (tsym == sym_cache.Int64)   return ctx.jl_Int64_t();
+        if (tsym == sym_cache.Int128)  return ctx.jl_Int128_t();
+        if (tsym == sym_cache.UInt8)   return ctx.jl_UInt8_t();
+        if (tsym == sym_cache.UInt16)  return ctx.jl_UInt16_t();
+        if (tsym == sym_cache.UInt32)  return ctx.jl_UInt32_t();
+        if (tsym == sym_cache.UInt64)  return ctx.jl_UInt64_t();
+        if (tsym == sym_cache.UInt128) return ctx.jl_UInt128_t();
+        if (tsym == sym_cache.Float32) return ctx.jl_Float32_t();
+        if (tsym == sym_cache.Float64) return ctx.jl_Float64_t();
+        if (tsym == sym_cache.String)  return ctx.jl_String_t();
+        if (tsym == sym_cache.Symbol)  return ctx.jl_Symbol_t();
+        if (tsym == sym_cache.Nothing) return ctx.jl_Nothing_t();
+        // clang-format on
+
+        static_assert((sizeof(void*) == 4U || sizeof(void*) == 8U) &&
+                      "unsupported environment (sizeof(void*) is not 32 or 64 bits)");
+
+        if constexpr (sizeof(void*) == 4U) {
+            if (tsym == sym_cache.Int)
+                return ctx.jl_Int32_t();
+            if (tsym == sym_cache.UInt)
+                return ctx.jl_UInt32_t();
+        } else if constexpr (sizeof(void*) == 8U) {
+            if (tsym == sym_cache.Int)
+                return ctx.jl_Int64_t();
+            if (tsym == sym_cache.UInt)
+                return ctx.jl_UInt64_t();
+        }
+
+        error(std::format("unsupported Julia type: {}", jl_symbol_name(tsym)));
+        return TypeId::null_id();
+    }
+
+    if (is_expr(type, sym_cache.curly)) {
+        error("parametric types are currently not supported");
+        return TypeId::null_id();
+    }
+
+    internal_error("unexpected non-symbol node in type specifying position");
     return TypeId::null_id();
 }
 
@@ -105,10 +145,10 @@ NodeId JLParser::parse(jl_value_t* node) {
         intptr_t line = jl_unbox_long(safe_fieldref(node, 0, "line"));
 
         // ! file::Union{Symbol, Nothing}
-        jl_value_t* file_val = safe_fieldref(node, 1, "file");
+        jl_value_t* file_v = safe_fieldref(node, 1, "file");
 
-        if (jl_is_symbol(file_val)) {
-            auto* file_sym = reinterpret_cast<jl_sym_t*>(file_val);
+        if (jl_is_symbol(file_v)) {
+            auto* file_sym = reinterpret_cast<jl_sym_t*>(file_v);
             std::ignore    = ctx.src_info_pool.get_file(jl_symbol_name(file_sym));
         } else {
             std::ignore = ctx.src_info_pool.get_file("<unknown>");
@@ -151,9 +191,9 @@ NodeId JLParser::parse(jl_value_t* node) {
     // quote nodes are simply unwrapped and parsed
     if (jl_is_quotenode(node)) {
         // ! value::Any
-        jl_value_t* inner_val = safe_fieldref(node, 0, "value");
+        jl_value_t* inner_v = safe_fieldref(node, 0, "value");
 
-        return parse(inner_val);
+        return parse(inner_v);
     }
 
     if (jl_is_expr(node))
@@ -239,12 +279,12 @@ NodeId JLParser::parse_code(std::string_view code) {
     jl_value_t* parsed_expr = nullptr;
     JL_GC_PUSH2(&code_jl_str, &parsed_expr);
 
-    jl_value_t* meta_mod_val = jl_get_global(jl_base_module, jl_symbol("Meta"));
-    if (meta_mod_val == nullptr || !jl_is_module(meta_mod_val)) {
+    jl_value_t* meta_mod_v = jl_get_global(jl_base_module, jl_symbol("Meta"));
+    if (meta_mod_v == nullptr || !jl_is_module(meta_mod_v)) {
         JL_GC_POP();
         throw std::logic_error{"Failed to look up Meta module inside Base"};
     }
-    jl_module_t* meta_mod = reinterpret_cast<jl_module_t*>(meta_mod_val);
+    jl_module_t* meta_mod = reinterpret_cast<jl_module_t*>(meta_mod_v);
 
     jl_function_t* parse_fn = jl_get_global(meta_mod, jl_symbol("parse"));
     if (parse_fn == nullptr) {
@@ -261,6 +301,7 @@ NodeId JLParser::parse_code(std::string_view code) {
     if (ex != nullptr) {
         const char* ex_type_str = jl_typeof_str(ex);
         jl_static_show(jl_stderr_stream(), ex);
+        std::cerr << '\n';
         jl_exception_clear();
 
         JL_GC_POP();
@@ -274,6 +315,22 @@ NodeId JLParser::parse_code(std::string_view code) {
     JL_GC_POP();
 
     return parser_result;
+}
+
+std::pair<jl_value_t*, TypeId> JLParser::parse_type_annotation(jl_expr_t* annot) {
+    assert(annot->head == sym_cache.double_col);
+
+    if (jl_expr_nargs(annot) != 2) {
+        internal_error("unexpected type annotation layout");
+        return {nullptr, TypeId::null_id()};
+    }
+
+    jl_value_t* target_v = jl_exprarg(annot, 0);
+
+    jl_value_t* type_v = jl_exprarg(annot, 1);
+    TypeId type_id     = resolve_type(type_v);
+
+    return {target_v, type_id};
 }
 
 NodeId JLParser::parse_expr(jl_expr_t* expr) {
@@ -292,11 +349,17 @@ NodeId JLParser::parse_expr(jl_expr_t* expr) {
     if (head == sym_cache.while_)
         return parse_while(expr, nargs);
 
+    if (head == sym_cache.return_)
+        return parse_return(expr, nargs);
+
     if (head == sym_cache.eq)
         return parse_assignment(expr, nargs);
 
     if (head == sym_cache.global || head == sym_cache.local)
         return parse_var_decl(expr, nargs);
+
+    if (head == sym_cache.function)
+        return parse_method_decl(expr, nargs);
 
     if (head == sym_cache.break_)
         return emplace_node<BreakStmt>(cur_loc);
@@ -304,27 +367,40 @@ NodeId JLParser::parse_expr(jl_expr_t* expr) {
     if (head == sym_cache.continue_)
         return emplace_node<ContinueStmt>(cur_loc);
 
-    // TODO: print cur_loc and julia dump node
-    throw jl_parse_error{"Unrecognized Expr node encountered in Julia source code"};
+    if (head == sym_cache.arrow)
+        return error("arrow functions are not currently supported");
+
+    // TODO: julia dump node
+    jl_static_show(jl_stderr_stream(), reinterpret_cast<jl_value_t*>(expr));
+    std::cerr << '\n';
+    return error("unsupported Expr node in Julia source code");
 }
 
 NodeId JLParser::parse_var_decl(jl_expr_t* expr, size_t nargs) {
-    assert(expr->head == sym_cache.global || expr->head == sym_cache.local);
-    auto scope = expr->head == sym_cache.global ? ScopeType::Global : ScopeType::Local;
+    assert(expr->head == sym_cache.global || expr->head == sym_cache.local ||
+           expr->head == sym_cache.eq || expr->head == sym_cache.double_col);
 
     SrcLocationId decl_loc = cur_loc;
 
-    if (nargs != 1)
-        throw jl_parse_error{"Variable declaration with more/less than one arg"};
+    jl_value_t* inner    = reinterpret_cast<jl_value_t*>(expr);
+    jl_value_t* id       = nullptr;
+    jl_value_t* type     = nullptr;
+    jl_value_t* init     = nullptr;
+    MaybeScopeType scope = MaybeScopeType::Unspec;
 
-    jl_value_t* inner = jl_exprarg(expr, 0);
-    jl_value_t* id    = nullptr;
-    jl_value_t* type  = nullptr;
-    jl_value_t* init  = nullptr;
+    if (nargs == 0 || nargs > 2) {
+        return internal_error(
+            "unexpected number of args in variable declaration (expected 1 or 2)");
+    }
+
+    if (is_expr(inner, sym_cache.global) || is_expr(inner, sym_cache.local)) {
+        scope = is_expr(inner, sym_cache.global) ? MaybeScopeType::Global : MaybeScopeType::Local;
+        inner = jl_exprarg(expr, 0);
+    }
 
     if (auto* assignment_expr = is_expr(inner, sym_cache.eq)) {
         if (jl_expr_nargs(assignment_expr) != 2)
-            throw jl_parse_error{"Assignment expression with more/less than two args"};
+            return internal_error("assignment expression with more/less than two args");
 
         inner = jl_exprarg(assignment_expr, 0);
         init  = jl_exprarg(assignment_expr, 1);
@@ -332,7 +408,7 @@ NodeId JLParser::parse_var_decl(jl_expr_t* expr, size_t nargs) {
 
     if (auto* typed_expr = is_expr(inner, sym_cache.double_col)) {
         if (jl_expr_nargs(typed_expr) != 2)
-            throw jl_parse_error{"Type annotation expression with more/less than two args"};
+            return internal_error("type annotation expression with more/less than two args");
 
         id   = jl_exprarg(typed_expr, 0);
         type = jl_exprarg(typed_expr, 1);
@@ -343,8 +419,8 @@ NodeId JLParser::parse_var_decl(jl_expr_t* expr, size_t nargs) {
     }
 
     if (id == nullptr || !jl_is_symbol(id))
-        throw jl_parse_error{
-            "Invalid variable declaration expression, couldn't unwrap identifier symbol"};
+        return internal_error(
+            "invalid variable declaration expression, couldn't unwrap identifier symbol");
 
     SymbolId id_sym = ctx.sym_pool.get_id(jl_symbol_name(safe_cast<jl_sym_t>(id)));
 
@@ -353,15 +429,159 @@ NodeId JLParser::parse_var_decl(jl_expr_t* expr, size_t nargs) {
                                  init != nullptr ? parse(init) : NodeId::null_id());
 }
 
+NodeId JLParser::parse_method_decl(jl_expr_t* expr, size_t nargs) {
+    assert(expr->head == sym_cache.function || expr->head == sym_cache.eq);
+
+    if (nargs != 2)
+        return internal_error("unexpected function definition layout, expected two argument for "
+                              "both longdef and shortdef formats");
+
+    SrcLocationId method_loc = cur_loc;
+
+    // assignment lhs in shortdef, or header part of fn def
+    jl_value_t* header_v = jl_exprarg(expr, 0);
+    if (!jl_is_expr(header_v))
+        return internal_error("unexpected function definition layout, couldn't unwrap header");
+    jl_expr_t* header = reinterpret_cast<jl_expr_t*>(header_v);
+
+    // function(x::T) where {T <: Int} ... end
+    if (header->head == sym_cache.where)
+        return error("type parameters in method definitions are not supported currently (i.e. "
+                     "using 'where' in the header)");
+
+    // function() ... end
+    if (header->head == sym_cache.tuple)
+        return error("anonymous functions are not currently supported");
+
+    TypeId expl_ret_type = TypeId::null_id();
+    // function f()::Int ... end
+    if (header->head == sym_cache.double_col) {
+        auto [node, type] = parse_type_annotation(header);
+
+        // assumes error has already been reported, only propagates failure
+        if (node == nullptr || type.is_null())
+            return NodeId::null_id();
+
+        if (!jl_is_expr(node))
+            return internal_error("unexpected non-expr node in function header");
+
+        header = reinterpret_cast<jl_expr_t*>(node);
+    }
+
+    if (header->head != sym_cache.call)
+        return internal_error(
+            std::format("unexpected function header Expr kind: {}", jl_symbol_name(header->head)));
+
+    size_t header_nargs = jl_expr_nargs(header);
+
+    if (header_nargs == 0)
+        return internal_error("unexpected empty function header layout");
+
+    jl_value_t* name_v = jl_exprarg(header, 0);
+    if (!jl_is_symbol(name_v))
+        return internal_error("unexpected non-symbol name in function header");
+    jl_sym_t* name = reinterpret_cast<jl_sym_t*>(name_v);
+
+    SymbolId fn_name = ctx.sym_pool.get_id(jl_symbol_name(name));
+
+    std::vector<NodeId> param_decls{};
+    param_decls.reserve(header_nargs - 1);
+    for (size_t i = 1; i < header_nargs; i++) {
+        jl_value_t* arg_v = jl_exprarg(header, i);
+
+        NodeId arg_id = parse_param_decl(arg_v);
+        assert(ctx.isa<ParamDecl>(arg_id));
+
+        param_decls.emplace_back(arg_id);
+    }
+
+    // assignment rhs in shortdef, or body part of fn def
+    jl_value_t* body_v = jl_exprarg(expr, 1);
+    if (!jl_is_expr(body_v))
+        return internal_error("unexpected function definition layout, couldn't unwrap body");
+
+    NodeId body_node = parse(body_v);
+
+    return emplace_node<MethodDecl>(method_loc, fn_name, expl_ret_type, std::move(param_decls),
+                                    body_node);
+}
+
+NodeId JLParser::parse_param_decl(jl_value_t* param) {
+    if (param == nullptr)
+        return internal_error("null pointer in Julia AST");
+
+    SrcLocationId param_loc = cur_loc;
+
+    auto create_param = [this, param_loc](jl_sym_t* sym, TypeId type = TypeId::null_id(),
+                                          NodeId init = NodeId::null_id()) -> NodeId {
+        return this->emplace_node<ParamDecl>(param_loc, ctx.sym_pool.get_id(jl_symbol_name(sym)),
+                                             type, false, init);
+    };
+
+    if (jl_is_symbol(param))
+        return create_param(safe_cast<jl_sym_t>(param));
+
+    if (jl_is_expr(param)) {
+        jl_expr_t* param_expr = safe_cast<jl_expr_t>(param);
+
+        TypeId type = TypeId::null_id();
+        NodeId init = NodeId::null_id();
+
+        // TODO: kwargs
+        if (param_expr->head == sym_cache.parameters)
+            return error("kwargs are currently not supported");
+
+        if (param_expr->head == sym_cache.kw) {
+            if (jl_expr_nargs(param_expr) != 2)
+                return internal_error("unexpected layout in default initialized parameter node");
+
+            init  = parse(jl_exprarg(param_expr, 1));
+            param = jl_exprarg(param_expr, 0);
+        }
+
+        if (jl_is_symbol(param))
+            return create_param(safe_cast<jl_sym_t>(param), type, init);
+
+        param_expr = safe_cast<jl_expr_t>(param);
+
+        if (param_expr->head == sym_cache.dots)
+            return error("variadic arguments are currently not supported");
+
+        if (param_expr->head == sym_cache.double_col) {
+            auto [inner, annot_type] = parse_type_annotation(param_expr);
+
+            type  = annot_type;
+            param = inner;
+        }
+
+        if (jl_is_symbol(param))
+            return create_param(safe_cast<jl_sym_t>(param), type, init);
+
+        return internal_error("unexpected parameter layout");
+    }
+
+    return internal_error("unexpected node kind for a parameter");
+}
+
 NodeId JLParser::parse_assignment(jl_expr_t* expr, size_t nargs) {
     assert(expr->head == sym_cache.eq);
 
     if (nargs != 2)
-        throw jl_parse_error{"Assignment expression with more/less than two args"};
+        return internal_error("Assignment expression with more/less than two args");
+
+    jl_value_t* lhs = jl_exprarg(expr, 0);
+
+    // f(x, y) = x + y
+    if (is_expr(lhs, sym_cache.call))
+        return parse_method_decl(expr, nargs);
+
+    // x::Int = 0
+    if (is_expr(lhs, sym_cache.double_col))
+        return parse_var_decl(expr, nargs);
 
     SrcLocationId outer_loc = cur_loc;
 
-    NodeId parsed_lhs = parse(jl_exprarg(expr, 0));
+    NodeId parsed_lhs = parse(lhs);
     NodeId parsed_rhs = parse(jl_exprarg(expr, 1));
 
     return emplace_node<Assignment>(outer_loc, parsed_lhs, parsed_rhs);
@@ -398,7 +618,7 @@ NodeId JLParser::parse_call(jl_expr_t* expr, size_t nargs) {
     SrcLocationId call_loc = cur_loc;
 
     if (nargs == 0)
-        throw jl_parse_error{"Function call expression with zero arguments"};
+        return internal_error("function call expression with zero arguments");
 
     NodeId parsed_target_fn = parse(jl_exprarg(expr, 0));
 
@@ -411,7 +631,7 @@ NodeId JLParser::parse_call(jl_expr_t* expr, size_t nargs) {
         if (arg_expr != nullptr && arg_expr->head == sym_cache.parameters) {
             // TODO
             // args traversal where arg is either Expr(:kw, k, v) or Symbol (<=> Expr(:kw, k, k))
-            throw std::runtime_error{"Keyword arguments are not supported yet"};
+            throw std::runtime_error{"Keyword arguments are not currently supported"};
         }
 
         NodeId parsed_arg = parse(arg);
@@ -427,8 +647,7 @@ NodeId JLParser::parse_if(jl_expr_t* expr, size_t nargs) {
     SrcLocationId if_loc = cur_loc;
 
     if (nargs < 2)
-        throw jl_parse_error{
-            "If expr without at least two args (assumed: condition + true branch)"};
+        return internal_error("if expr without at least two args");
 
     NodeId parsed_cond  = parse(jl_exprarg(expr, 0));
     NodeId parsed_true  = parse(jl_exprarg(expr, 1));
@@ -452,7 +671,7 @@ NodeId JLParser::parse_while(jl_expr_t* expr, size_t nargs) {
     assert(expr->head == sym_cache.while_);
 
     if (nargs != 2)
-        throw jl_parse_error{"Unexpected while expr arg count"};
+        return internal_error("unexpected while expr arg count");
 
     SrcLocationId while_loc = cur_loc;
 
@@ -465,16 +684,41 @@ NodeId JLParser::parse_while(jl_expr_t* expr, size_t nargs) {
 NodeId JLParser::parse_return(jl_expr_t* expr, size_t nargs) {
     assert(expr->head == sym_cache.return_);
 
-    if (nargs == 0)
-        return emplace_node<ReturnStmt>(cur_loc);
-
     if (nargs != 1)
-        throw jl_parse_error{"Return expr with more than one arg (assumed 0 or 1)"};
+        return internal_error("unexpected return expr layout (more or less than one arg)");
 
     SrcLocationId ret_loc = cur_loc;
-    NodeId parsed_inner   = parse(jl_exprarg(expr, 0));
+    jl_value_t* inner     = jl_exprarg(expr, 0);
+    NodeId parsed_inner   = NodeId::null_id();
+
+    bool is_nothing_literal =
+        jl_is_symbol(inner) && safe_cast<jl_sym_t>(inner) == sym_cache.nothing;
+    bool is_implicit_nothing = jl_is_nothing(inner);
+
+    if (!is_nothing_literal && !is_implicit_nothing)
+        parsed_inner = parse(inner);
 
     return emplace_node<ReturnStmt>(ret_loc, parsed_inner);
+}
+
+NodeId JLParser::error(std::string_view msg, SrcLocationId loc_id) {
+    if (loc_id.is_null())
+        loc_id = cur_loc;
+
+    _success = false;
+    stc::error(ctx.src_info_pool, loc_id, msg);
+
+    return NodeId::null_id();
+}
+
+NodeId JLParser::internal_error(std::string_view msg, SrcLocationId loc_id) {
+    if (loc_id.is_null())
+        loc_id = cur_loc;
+
+    _success = false;
+    stc::internal_error(ctx.src_info_pool, loc_id, msg);
+
+    return NodeId::null_id();
 }
 
 } // namespace stc::jl

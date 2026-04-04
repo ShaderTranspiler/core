@@ -17,6 +17,13 @@ std::string scope_str(ScopeType scope) {
     throw std::logic_error{"Unaccounted ScopeType in switch"};
 }
 
+std::string scope_str(MaybeScopeType mst) {
+    if (mst == MaybeScopeType::Unspec)
+        return "unspecified";
+
+    return scope_str(mst_to_st(mst));
+}
+
 std::string decl_type_str(Decl* decl) {
     // clang-format off
     #define X(type, kind)                                                                              \
@@ -91,8 +98,8 @@ bool JLDumper::pre_visit_ptr(Expr* expr) {
 }
 
 void JLDumper::visit_VarDecl(VarDecl& var) {
-    out << indent() << "VarDecl (" << scope_str(var.scope()) << "): " << sym(var.identifier)
-        << " <: " << type_str(var.type) << '\n';
+    out << indent() << "VarDecl (" << scope_str(var.scope()) << "): " << sym(var.identifier) << " ("
+        << type_str(var.annot_type) << ")\n";
 
     if (!var.initializer.is_null()) {
         out << indent() << dump_label("initializer");
@@ -129,8 +136,8 @@ void JLDumper::visit_FunctionDecl(FunctionDecl& fn) {
 }
 
 void JLDumper::visit_ParamDecl(ParamDecl& param) {
-    out << indent() << "ParamDecl: " << sym(param.identifier) << " <: " << type_str(param.type)
-        << '\n';
+    out << indent() << "ParamDecl: " << sym(param.identifier) << " (" << type_str(param.annot_type)
+        << ")\n";
 
     if (!param.default_initializer.is_null()) {
         out << indent() << dump_label("default initializer");
@@ -151,8 +158,8 @@ void JLDumper::visit_StructDecl(StructDecl& struct_) {
 }
 
 void JLDumper::visit_FieldDecl(FieldDecl& field) {
-    out << indent() << "FieldDecl: " << sym(field.identifier) << " <: " << type_str(field.type)
-        << '\n';
+    out << indent() << "FieldDecl: " << sym(field.identifier) << " (" << type_str(field.type)
+        << ")\n";
 }
 
 void JLDumper::visit_CompoundExpr(CompoundExpr& cmpd) {
@@ -190,8 +197,8 @@ GEN_UINT_LITERAL_VISITOR(UInt32Literal, 10)
 GEN_UINT_LITERAL_VISITOR(UInt64Literal, 18)
 
 void JLDumper::visit_UInt128Literal(UInt128Literal& lit) {
-    out << indent() << "UInt128Literal: " << std::format("{:#034x}", lit.high)
-        << std::format("{:034x}", lit.low) << '\n';
+    out << indent() << "UInt128Literal: " << std::format("{:#034x}", lit.hi)
+        << std::format("{:034x}", lit.lo) << '\n';
 }
 
 // CLEANUP: prettier printing for long/multiline literals with wrapping

@@ -1,8 +1,11 @@
 #include "common/x_macros/begin_def.inc"
 
 STC_X_FIRST(jl_Bool_t)
+STC_X(jl_Int8_t)
+STC_X(jl_Int16_t)
 STC_X(jl_Int32_t)
 STC_X(jl_Int64_t)
+STC_X(jl_Int128_t)
 STC_X(jl_UInt8_t)
 STC_X(jl_UInt16_t)
 STC_X(jl_UInt32_t)
