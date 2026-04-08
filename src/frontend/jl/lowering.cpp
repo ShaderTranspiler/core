@@ -54,24 +54,86 @@ SIRNodeId JLLoweringVisitor::lower(NodeId global_cmpd_id) {
 
     auto& body = global_cmpd->body;
 
-    // lift global method decls to top
-    std::stable_partition(body.begin(), body.end(),
-                          [this](NodeId expr) -> bool { return this->ctx.isa<MethodDecl>(expr); });
+    // lift global var decls (including implicit ones) to the top
+    std::vector<NodeId> prepended_exprs{};
+    bool encountered_real_body = false;
+    for (size_t i = 0; i < body.size();) {
+        NodeId expr = body[i];
 
-    // wrap rest in a main function
-    size_t body_first_idx = 0;
+        auto* vdecl = ctx.get_and_dyn_cast<VarDecl>(expr);
+        if (vdecl) {
+            if (mst_to_st(vdecl->scope()) == ScopeType::Global) {
+                prepended_exprs.emplace_back(expr);
+
+                if (vdecl->initializer.is_null() || !encountered_real_body) {
+                    body.erase(body.begin() + i);
+                    continue;
+                }
+
+                NodeId dre = ctx.emplace_node<DeclRefExpr>(vdecl->location, expr).first;
+                NodeId init_assign =
+                    ctx.emplace_node<Assignment>(vdecl->location, dre, vdecl->initializer).first;
+                body[i] = init_assign;
+
+                vdecl->initializer = NodeId::null_id();
+
+                i++;
+            }
+
+            continue;
+        }
+
+        auto* assign = ctx.get_and_dyn_cast<Assignment>(expr);
+        if (assign && assign->is_implicit_decl()) {
+            const auto* dre = ctx.get_and_dyn_cast<DeclRefExpr>(assign->target);
+            assert(dre != nullptr);
+
+            auto* vdecl = ctx.get_and_dyn_cast<VarDecl>(dre->decl);
+            if (mst_to_st(vdecl->scope()) == ScopeType::Global) {
+                body[i] = dre->decl;
+                continue; // parse current line again as a global var decl, with initializer
+            }
+
+            if (!ctx.isa<MethodDecl>(dre->decl))
+                encountered_real_body = true;
+
+            i++;
+            continue;
+        }
+
+        if (!ctx.isa<MethodDecl>(expr))
+            encountered_real_body = true;
+
+        i++;
+    }
+
+    body.insert(body.begin(), prepended_exprs.begin(), prepended_exprs.end());
+
+    // lift global method decls to underneath global var decls
+    std::stable_partition(body.begin() + prepended_exprs.size(), body.end(),
+                          [this](NodeId expr) -> bool { return ctx.isa<MethodDecl>(expr); });
+
+    // wrap rest of body in a main function
+    size_t body_first_idx = prepended_exprs.size();
     while (body_first_idx < body.size() && ctx.isa<MethodDecl>(body[body_first_idx]))
         body_first_idx++;
 
-    if (body_first_idx >= body.size())
-        return visit(global_cmpd);
-
-    SrcLocationId main_loc = ctx.get_node(body[body_first_idx])->location;
+    // if (body_first_idx >= body.size())
+    //     return visit(global_cmpd);
 
     std::vector<NodeId> main_body{};
-    main_body.reserve(body.size() - body_first_idx);
-    main_body.insert(main_body.end(), body.begin() + body_first_idx, body.end());
+
+    if (body_first_idx < body.size()) {
+        main_body.reserve(body.size() - body_first_idx);
+        main_body.insert(main_body.end(), body.begin() + body_first_idx, body.end());
+    }
+
     body.resize(body_first_idx); // leave one for the main method's decl
+
+    SrcLocationId main_loc = !main_body.empty()
+                                 ? ctx.get_node(main_body.back())->location
+                                 : (!body.empty() ? ctx.get_node(body.back())->location
+                                                  : ctx.src_info_pool.get_location(1, 1));
 
     NodeId main_cmpd = ctx.emplace_node<CompoundExpr>(main_loc, std::move(main_body)).first;
 
@@ -130,6 +192,11 @@ SIRNodeId JLLoweringVisitor::visit_ParamDecl(ParamDecl& param) {
     swap_lower_type(param.annot_type);
 
     return emplace_decl<sir::ParamDecl>(&param, param.location, param.identifier, param.type);
+}
+
+SIRNodeId JLLoweringVisitor::visit_OpaqueFunction(OpaqueFunction& opaq_fn) {
+    return fail(std::format("cannot transpile unknown Julia function '{}'",
+                            sir_ctx.get_sym(opaq_fn.fn_name())));
 }
 
 SIRNodeId JLLoweringVisitor::visit_StructDecl(StructDecl& struct_) {
@@ -261,22 +328,34 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
         return internal_error(
             "non-declaration-reference node in FunctionCall's target_fn not caught by sema");
 
-    auto* decl = ctx.get_and_dyn_cast<FunctionDecl>(dre->decl);
+    // TODO: check for and verify builtins
 
-    if (decl == nullptr)
-        return internal_error("non-function-declaration-reference in FunctionCall's target_fn");
+    SymbolId fn_identifier = SymbolId::null_id();
 
-    auto make_binop = [&fn_call, this](sir::BinaryOp::OpKind kind) -> SIRNodeId {
+    if (auto* decl = ctx.get_and_dyn_cast<FunctionDecl>(dre->decl))
+        fn_identifier = decl->identifier;
+    else if (auto* opaq = ctx.get_and_dyn_cast<OpaqueFunction>(dre->decl))
+        fn_identifier = opaq->fn_name();
+    else if (ctx.isa<SymbolLiteral>(dre->decl))
+        return internal_error("unresolved declaration reference expression found post-sema");
+    else
+        return internal_error(
+            "unexpected declaration kind referenced in target of a function call");
+
+    if (fn_identifier.is_null())
+        return internal_error("couldn't determine identifier for the target of a function call");
+
+    auto make_binop = [this, &fn_call](sir::BinaryOp::OpKind kind) -> SIRNodeId {
         return emplace_node<sir::BinaryOp>(fn_call.location, kind, visit_and_check(fn_call.args[0]),
                                            visit_and_check(fn_call.args[1]));
     };
 
     if (fn_call.args.size() == 2) {
-        if (decl->identifier == sym_plus)
+        if (fn_identifier == sym_plus)
             return make_binop(sir::BinaryOp::OpKind::add);
-        if (decl->identifier == sym_minus)
+        if (fn_identifier == sym_minus)
             return make_binop(sir::BinaryOp::OpKind::sub);
-        if (decl->identifier == sym_asterisk)
+        if (fn_identifier == sym_asterisk)
             return make_binop(sir::BinaryOp::OpKind::mul);
     }
 
@@ -286,7 +365,7 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     for (NodeId arg : fn_call.args)
         args.push_back(visit_and_check(arg));
 
-    return emplace_node<sir::FunctionCall>(fn_call.location, decl->identifier, std::move(args));
+    return emplace_node<sir::FunctionCall>(fn_call.location, fn_identifier, std::move(args));
 }
 
 SIRNodeId JLLoweringVisitor::visit_IfExpr(IfExpr& if_) {

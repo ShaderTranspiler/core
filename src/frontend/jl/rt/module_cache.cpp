@@ -20,7 +20,7 @@ jl_function_t* JuliaModule::get_fn(std::string_view fn_name) {
     return fn_cache_it->second;
 }
 
-JuliaModule& JuliaModuleCache::get_mod(std::string_view mod_path) {
+JuliaModule& JuliaModuleCache::get_mod(std::string_view mod_path, jl_module_t* root_mod) {
     auto it = module_cache.find(mod_path);
     if (it != module_cache.end())
         return it->second;
@@ -43,7 +43,7 @@ JuliaModule& JuliaModuleCache::get_mod(std::string_view mod_path) {
 
     size_t first_pos    = 0U;
     size_t dot_pos      = mod_path.find('.', first_pos);
-    jl_module_t* mod_it = main_module.mod_ptr();
+    jl_module_t* mod_it = root_mod;
     while (dot_pos != mod_path.npos) {
         if (first_pos == dot_pos)
             throw std::logic_error{std::format(
@@ -67,7 +67,7 @@ JuliaModule& JuliaModuleCache::get_mod(std::string_view mod_path) {
     return mod_cache_it->second;
 }
 
-JuliaModule& JuliaModuleCache::get_mod(std::string_view mod_path, jl_module_t* mod) {
+JuliaModule& JuliaModuleCache::register_mod(std::string_view mod_path, jl_module_t* mod) {
     auto it = module_cache.find(mod_path);
     if (it != module_cache.end()) {
         if (it->second.mod_ptr() != mod)

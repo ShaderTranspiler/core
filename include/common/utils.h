@@ -170,6 +170,11 @@ concept CNullableSplitId =
 template <typename... Ts>
 inline constexpr bool dependent_false_v = false;
 
+template <typename ImplTy, typename RetTy, typename T>
+concept CHasVisitorFor = requires (ImplTy impl, T t) {
+    { impl.visit(t) } -> std::convertible_to<RetTy>;
+};
+
 template <typename T, typename V>
 concept CEnumOf = std::is_enum_v<T> && std::same_as<std::underlying_type_t<T>, V>;
 
@@ -202,6 +207,15 @@ struct VectorHash {
     }
 };
 
+template <typename U, typename V, typename UHasher = std::hash<U>, typename VHasher = std::hash<V>>
+requires CHashable<U, UHasher> && CHashable<V, VHasher>
+struct PairwiseHash {
+    size_t operator()(const std::pair<U, V>& pair) const noexcept {
+        size_t u_hash = UHasher{}(pair.first);
+        return hash_combine<V, VHasher>(u_hash, pair.second);
+    }
+};
+
 // for heterogenous lookup for string/string_view (avoids implicit string alloc for string_views)
 // https://www.cppstories.com/2021/heterogeneous-access-cpp20/
 struct TransparentStringHash {
@@ -210,6 +224,56 @@ struct TransparentStringHash {
     size_t operator()(const std::string& str) const { return std::hash<std::string>{}(str); }
     size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
     size_t operator()(const char* c_str) const { return std::hash<std::string_view>{}(c_str); }
+};
+
+// mainly just wraps an optional together with an initializer, a more generic version of:
+// https://softwarepatternslexicon.com/cpp/creational-patterns-in-c/lazy-initialization/
+// reference and pointer types are supported too
+template <typename InitFn>
+requires std::invocable<InitFn> && (!std::is_void_v<std::invoke_result_t<InitFn>>)
+struct LazyInit {
+private:
+    using InitRetTy = std::invoke_result_t<InitFn>;
+    using StoredTy =
+        std::conditional_t<std::is_reference_v<InitRetTy>,
+                           std::reference_wrapper<std::remove_reference_t<InitRetTy>>, InitRetTy>;
+
+    std::optional<StoredTy> value = std::nullopt;
+    InitFn initializer;
+
+public:
+    explicit LazyInit(InitFn initializer)
+        : initializer{initializer} {}
+
+    bool has_value() const { return value.has_value(); }
+
+    decltype(auto) get() {
+        if (!value.has_value())
+            value.emplace(std::invoke(initializer));
+
+        if constexpr (std::is_reference_v<InitRetTy>)
+            return value->get(); // unwrap reference_wrapper
+        else if constexpr (std::is_pointer_v<InitRetTy>)
+            return *value + 0; // force copy so that T* is returned instead of T*&
+        else
+            return *value;
+    }
+};
+
+template <typename DtorFn>
+requires std::invocable<DtorFn>
+struct ScopeGuard {
+    DtorFn fn;
+
+    explicit ScopeGuard(DtorFn fn)
+        : fn{fn} {}
+
+    ~ScopeGuard() { fn(); }
+
+    ScopeGuard(const ScopeGuard&)            = delete;
+    ScopeGuard& operator=(const ScopeGuard&) = delete;
+    ScopeGuard(ScopeGuard&&)                 = delete;
+    ScopeGuard& operator=(ScopeGuard&&)      = delete;
 };
 
 } // namespace stc

@@ -100,6 +100,9 @@ size_t SrcInfoPool::get_file(std::string path) {
 }
 
 SrcLocation SrcInfoPool::get_location(SrcLocationId loc_id) const {
+    if (loc_id.is_null())
+        return SrcLocation::null();
+
     auto* loc = arena.get_ptr<SrcLocation>(loc_id);
 
     if (loc == nullptr)

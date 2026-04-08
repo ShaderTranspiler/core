@@ -26,12 +26,6 @@ public:
         fn_cache.reserve(16);
     }
 
-    explicit JuliaModule(jl_module_t* mod_ptr, FunctionCache initial_fn_cache)
-        : _mod_ptr{mod_ptr}, fn_cache{std::move(initial_fn_cache)} {
-
-        assert(mod_ptr != nullptr && "trying to initialize julia module with nullptr");
-    }
-
     jl_module_t* mod_ptr() const { return _mod_ptr; }
 
     // returns fn ptr from cache, or retrieves from julia, adds to cache and returns
@@ -46,27 +40,34 @@ class JuliaModuleCache {
 
 public:
     explicit JuliaModuleCache()
-        : main_module{get_mod("Main", jl_main_module)},
-          base_module{get_mod("Base", jl_base_module)},
-          core_module{get_mod("Core", jl_core_module)},
-          meta_module{get_mod("Base.Meta")} {}
+        : main_mod{register_mod("Main", jl_main_module)},
+          base_mod{register_mod("Base", jl_base_module)},
+          core_mod{register_mod("Core", jl_core_module)},
+          meta_mod{get_mod("Base.Meta")},
+          comp_mod{get_mod("Core.Compiler")} {}
 
     // returns JuliaModule from cache, or retrieves it from julia, adds to cache and returns
     // mod_path format: X.Y.Z
-    [[nodiscard]] JuliaModule& get_mod(std::string_view mod_path);
+    [[nodiscard]] JuliaModule& get_mod(std::string_view mod_path,
+                                       jl_module_t* root_mod = jl_main_module);
+
+    [[nodiscard]] JuliaModule& get_mod(std::string_view mod_path, const JuliaModule& root_mod) {
+        return get_mod(mod_path, root_mod.mod_ptr());
+    }
 
     // shorthands for common modules
-    JuliaModule& main_module;
-    JuliaModule& base_module;
-    JuliaModule& core_module;
-    JuliaModule& meta_module;
+    JuliaModule& main_mod; // Main
+    JuliaModule& base_mod; // Base
+    JuliaModule& core_mod; // Core
+    JuliaModule& meta_mod; // Base.Meta
+    JuliaModule& comp_mod; // Core.Compiler
 
     // shorthands for common functions
     jl_function_t* meta_parse     = nullptr;
     jl_function_t* comp_ret_types = nullptr;
 
 private:
-    [[nodiscard]] JuliaModule& get_mod(std::string_view mod_path, jl_module_t* mod);
+    [[nodiscard]] JuliaModule& register_mod(std::string_view mod_path, jl_module_t* mod);
 };
 
 } // namespace stc::jl::rt

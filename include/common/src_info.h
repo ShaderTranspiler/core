@@ -81,6 +81,8 @@ public:
     [[nodiscard]]
     std::pair<SrcLocation, const SrcFile&> get_loc_and_file(SrcLocationId loc_id) const;
 
+    [[nodiscard]] SrcLocationId null_loc() const;
+
 private:
     ArenaTy arena;
     ArenaAllocTy arena_alloc;

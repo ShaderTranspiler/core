@@ -135,7 +135,7 @@ int transpile(std::string_view code, bool dump_parsed, bool dump_sema, bool dump
     std::cout << std::format("Sema finished in {}\n", sema_duration);
     std::cout << std::format("Lowering finished in {}\n", lowering_duration);
     std::cout << std::format("Codegen finished in {}\n", codegen_duration);
-    std::cout << std::format("\nEntire transpilation pipeline finished in {}", overall_duration);
+    std::cout << std::format("\nEntire transpilation pipeline finished in {}\n", overall_duration);
 
     std::cout.flush();
     return 0;

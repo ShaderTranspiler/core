@@ -212,42 +212,28 @@ NodeId JLParser::parse_code(std::string_view code) {
     jl_value_t* parsed_expr = nullptr;
     JL_GC_PUSH2(&code_jl_str, &parsed_expr);
 
+    ScopeGuard jl_gc_pop_guard{[&]() { JL_GC_POP(); }};
+
     jl_value_t* meta_mod_v = jl_get_global(jl_base_module, jl_symbol("Meta"));
-    if (meta_mod_v == nullptr || !jl_is_module(meta_mod_v)) {
-        JL_GC_POP();
+    if (meta_mod_v == nullptr || !jl_is_module(meta_mod_v))
         throw std::logic_error{"Failed to look up Meta module inside Base"};
-    }
+
     jl_module_t* meta_mod = reinterpret_cast<jl_module_t*>(meta_mod_v);
 
     jl_function_t* parse_fn = jl_get_global(meta_mod, jl_symbol("parse"));
-    if (parse_fn == nullptr) {
-        JL_GC_POP();
+    if (parse_fn == nullptr)
         throw std::logic_error{"Failed to look up parse function inside the Meta module"};
-    }
 
     // implemented as a simple memcpy in libjulia, avoids strlen (==> null termination agnostic)
     code_jl_str = jl_pchar_to_string(code.data(), code.size());
 
     parsed_expr = jl_call1(parse_fn, code_jl_str);
 
-    jl_value_t* ex = jl_exception_occurred();
-    if (ex != nullptr) {
-        const char* ex_type_str = jl_typeof_str(ex);
-        jl_static_show(jl_stderr_stream(), ex);
-        std::cerr << '\n';
-        jl_exception_clear();
+    if (check_exceptions())
+        throw std::runtime_error{
+            "Julia exception while trying to parse code string using Meta.parse"};
 
-        JL_GC_POP();
-
-        throw std::runtime_error{std::format(
-            "Julia exception while trying to parse code string using Meta.parse: {}", ex_type_str)};
-    }
-
-    NodeId parser_result = parse(parsed_expr);
-
-    JL_GC_POP();
-
-    return parser_result;
+    return parse(parsed_expr);
 }
 
 std::pair<jl_value_t*, TypeId> JLParser::parse_type_annotation(jl_expr_t* annot) {

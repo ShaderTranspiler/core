@@ -220,6 +220,24 @@ struct ParamDecl : public Decl {
     SAME_NODE_KIND_DEF(NodeKind::ParamDecl)
 };
 
+// stores a reference to a Julia-side function
+// should only be used with functions expected to be rooted for the lifetime of the transpiler
+// (e.g. global functions of modules accessible from Main)
+struct OpaqueFunction : public Decl {
+    jl_function_t* jl_function;
+
+    explicit OpaqueFunction(SrcLocationId location, SymbolId fn_name, jl_function_t* jl_function)
+        : Decl{location, NodeKind::OpaqFn, fn_name}, jl_function{jl_function} {
+
+        assert(jl_function != nullptr &&
+               "trying to store nullptr in OpaqueFunction's raw julia function pointer");
+    }
+
+    SymbolId fn_name() const { return identifier; }
+
+    SAME_NODE_KIND_DEF(NodeKind::OpaqFn)
+};
+
 // FEATURE: support for parametric types
 struct StructDecl : public Decl {
     std::vector<NodeId> field_decls;
@@ -386,7 +404,7 @@ struct GlobalRef : public Expr {
 
 // DeclRefExpr-s have 2 states:
 // unresolved (after parser): decl points to a SymbolLiteral
-// resolved (after sema): decl points to a Decl
+// resolved (after sema): decl points to a Decl or an OpaqueFunction
 struct DeclRefExpr : public Expr {
     NodeId decl;
 

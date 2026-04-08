@@ -21,7 +21,7 @@ public:
         : SIRVisitor<GLSLCodeGenVisitor, GLSLCtx, void>{ctx} {
 
         // TODO: config for version
-        out << "#version 460\n\n";
+        out << "#version 460\n\n// THIS CODE WAS GENERATED USING A JULIA TO GLSL TRANSPILER\n\n";
     }
 
     std::string result() {

@@ -10,9 +10,10 @@
 namespace stc::types {
 
 class TypePool final {
-private:
     using SizeTy  = TypeId::id_type;
     using ArenaTy = BumpArena<SizeTy>;
+
+    TypeId any_func = TypeId::null_id();
 
 public:
     explicit TypePool(SizeTy initial_capacity)
@@ -72,6 +73,10 @@ public:
     [[nodiscard]] TypeId array_td(TypeId element_type_id, uint32_t length);
     [[nodiscard]] TypeId method_td(TypeId ret_type, std::vector<TypeId> param_types);
     [[nodiscard]] TypeId func_td(SymbolId fn_name);
+    [[nodiscard]] TypeId any_func_td();
+    [[nodiscard]] bool is_any_func(TypeId type) const;
+    // compares based on pointer equality
+    [[nodiscard]] bool is_any_func(const TypeDescriptor* fn_td) const;
 
     [[nodiscard]] TypeId builtin_td(uint8_t kind);
 

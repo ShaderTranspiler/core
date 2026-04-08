@@ -157,7 +157,7 @@ struct BuiltinTD {
 };
 
 using TDVariantType = std::variant<VoidTD, BoolTD, IntTD, FloatTD, VectorTD, MatrixTD, ArrayTD,
-                                   StructTD, BuiltinTD, MethodTD, FunctionTD>;
+                                   StructTD, MethodTD, FunctionTD, BuiltinTD>;
 
 // CLEANUP: use a variadic template instead
 template <typename T>
@@ -208,10 +208,6 @@ private:
         : _type_data{std::move(type_data)} {}
 };
 static_assert(sizeof(TypeDescriptor) == sizeof(TDVariantType));
-
-std::string to_string(const TypeDescriptor& type, const TypePool& type_pool,
-                      const SymbolPool& sym_pool);
-std::string to_string(TypeId id, const TypePool& type_pool, const SymbolPool& sym_pool);
 
 } // namespace stc::types
 

@@ -7,6 +7,8 @@ namespace stc {
 
 #define STC_AST_VISITOR_DECL(RetTy, type) RetTy visit_##type(type&);
 
+// CLEANUP: revisit member access levels
+
 // CRTP base AST visitor class
 
 // derived visitors need to implement a visit_T function for every Stmt and Decl in the AST
@@ -28,8 +30,6 @@ class ASTVisitor {
     using NodeIdTy   = CtxTy::node_id_type;
     using NodeBaseTy = CtxTy::node_base_type;
 
-    NodeIdTy current_id = NodeIdTy::null_id();
-
 public:
     CtxTy& ctx;
 
@@ -38,11 +38,6 @@ public:
 
     ImplTy* impl_this() { return static_cast<ImplTy*>(this); }
     const ImplTy* impl_this() const { return static_cast<const ImplTy*>(this); }
-
-    template <typename T, typename U>
-    static T& as(U* ptr) {
-        return *static_cast<T*>(ptr);
-    }
 
 public:
     RetTy visit(NodeBaseTy* node, bool call_pre_visit = true) {

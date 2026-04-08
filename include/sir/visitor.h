@@ -24,12 +24,14 @@ protected:
 
 public:
     RetTy dispatch(NodeBase* node) {
+        assert(node != nullptr && "nullptr in dispatch call of SIR visitor");
+
         // clang-format off
         switch (node->kind()) {
 
         #define X(type, kind)                                                                  \
             case (NodeKind::kind):                                                             \
-                return this->impl_this()->visit_##type(this->template as<type>(node));
+                return this->impl_this()->visit_##type(*static_cast<type*>(node));
 
             #include "sir/node_defs/all_nodes.def"
         #undef X

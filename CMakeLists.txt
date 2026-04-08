@@ -181,7 +181,7 @@ list(FILTER LIB_SOURCES EXCLUDE REGEX "test/.*")
 
 file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS "include/*.h")
 
-set(LIB_TARGET stc_lib)
+set(LIB_TARGET stc)
 
 add_library(${LIB_TARGET} SHARED ${LIB_SOURCES})
 

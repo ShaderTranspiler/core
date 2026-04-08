@@ -2,6 +2,7 @@
 
 #include "frontend/jl/scope.h"
 #include "frontend/jl/sym_res.h"
+#include "frontend/jl/type_conversion.h"
 #include "frontend/jl/visitor.h"
 
 #include <span>
@@ -11,6 +12,8 @@ namespace stc::jl {
 class JLSema : public JLVisitor<JLSema, JLCtx, TypeId> {
     TypePool& tpool;
     std::vector<JLScope> scopes;
+    TypeToJLVisitor type_to_jl;
+
     TypeId expected_type       = TypeId::null_id();
     TypeId current_fn_ret      = TypeId::null_id();
     MethodDecl* current_method = nullptr;
@@ -21,7 +24,11 @@ class JLSema : public JLVisitor<JLSema, JLCtx, TypeId> {
 
 public:
     explicit JLSema(JLCtx& ctx, CompoundExpr& global_scope_body, bool in_interactive_ctx = false)
-        : JLVisitor{ctx}, tpool{ctx.type_pool}, scopes{}, in_interactive_ctx{in_interactive_ctx} {
+        : JLVisitor{ctx},
+          tpool{ctx.type_pool},
+          scopes{},
+          type_to_jl{ctx},
+          in_interactive_ctx{in_interactive_ctx} {
 
         push_scope(ScopeKind::Global, global_scope_body);
     }
@@ -40,6 +47,8 @@ public:
 
     // deferred method body visitor
     void visit_method_body(MethodDecl& method);
+
+    bool check_type_against(TypeId actual_type, TypeId expected_type) const;
 
     bool check(Expr& expr, TypeId expected, bool allow_pretyped = false);
     bool check(NodeId node_id, TypeId expected, bool allow_pretyped = false) {
@@ -82,6 +91,17 @@ public:
 private:
     bool is_checking() const { return !expected_type.is_null(); }
     bool is_inferring() const { return !is_checking(); }
+
+    jl_datatype_t* to_jl_type(TypeId type);
+
+    bool is_method_sig_redecl(const MethodDecl& method_decl, const FunctionDecl& fn_decl);
+
+    TypeId ret_type_of_call(jl_function_t* fn, const std::vector<TypeId>& arg_types,
+                            const Expr& call_expr);
+
+    std::optional<MethodDecl*> find_sig_match(const FunctionDecl& fn_decl,
+                                              const std::vector<TypeId>& arg_types,
+                                              const Expr& base_expr);
 
     void assert_scopes_notempty() const {
         assert(!scopes.empty() && "Empty scopes list in Julia Sema class");
@@ -226,8 +246,6 @@ private:
     TypeId fail(std::string_view msg, const Expr& expr);
     TypeId warn(std::string_view msg, const Expr& expr);
     TypeId internal_error(std::string_view msg, const Expr& expr);
-
-    bool is_method_sig_redecl(const MethodDecl& method_decl, const FunctionDecl& fn_decl);
 
     class ScopeRAII {
         using ParamDecls = std::span<std::reference_wrapper<ParamDecl>>;

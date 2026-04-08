@@ -75,4 +75,29 @@ STC_FORCE_INLINE T* try_cast(jl_value_t* value) {
     return reinterpret_cast<T*>(value);
 }
 
+[[nodiscard]]
+STC_FORCE_INLINE bool check_exceptions() {
+    if (jl_value_t* ex = jl_exception_occurred()) {
+        jl_static_show(jl_stderr_stream(), ex);
+        std::cerr << '\n';
+        jl_exception_clear();
+        return true;
+    }
+
+    return false;
+}
+
+[[nodiscard]]
+inline std::string get_jl_fn_name(jl_function_t* fn) {
+    jl_function_t* nameof_fn = jl_get_function(jl_base_module, "nameof");
+    jl_value_t* fn_sym_val   = jl_call1(nameof_fn, fn);
+
+    if (check_exceptions()) {
+        std::cerr << "the above error occured during resolving the name of a function\n";
+        return "?";
+    }
+
+    return jl_symbol_name(safe_cast<jl_sym_t>(fn_sym_val));
+}
+
 } // namespace stc::jl

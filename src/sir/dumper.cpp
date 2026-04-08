@@ -2,6 +2,7 @@
 
 #include "sir/dumper.h"
 #include "types/type_descriptors.h"
+#include "types/type_to_string.h"
 
 namespace {
 
@@ -36,7 +37,7 @@ std::string op_str(OpKind op) {
 namespace stc::sir {
 
 std::string SIRDumper::type_str(TypeId id) const {
-    return to_string(id, ctx.type_pool, ctx.sym_pool);
+    return type_to_string(id, ctx.type_pool, ctx.sym_pool);
 }
 
 std::string SIRDumper::indent() const {

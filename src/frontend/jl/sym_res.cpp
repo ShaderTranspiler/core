@@ -196,9 +196,13 @@ void SymbolRes::visit_ParamDecl(ParamDecl& pdecl) {
     try_register(pdecl.identifier, pdecl, ScopeInferSrc::Decl);
 }
 
+// opaque functions should not be visible during symbol resolution, they only get inserted during
+// the actual sema pass
+EMPTY_VISITOR_DEF(OpaqueFunction)
+
 // struct declaration are only allowed at the top level (global scope)
 // SymbolRes is defined to only be ran on local scopes
-EMPTY_VISITOR_DEF(StructDecl);
+EMPTY_VISITOR_DEF(StructDecl)
 EMPTY_VISITOR_DEF(FieldDecl)
 
 void SymbolRes::visit_CompoundExpr(CompoundExpr& cmpd) {

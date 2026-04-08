@@ -44,7 +44,7 @@ TypeId TypePool::bool_td() {
 }
 
 TypeId TypePool::int_td(uint32_t width, bool is_signed) {
-    return insert_or_get(IntTD{.width = width, .is_signed = is_signed});
+    return insert_or_get(IntTD{width, is_signed});
 }
 
 TypeId TypePool::float_td(uint32_t width, FloatTD::Encoding encoding) {
@@ -54,7 +54,7 @@ TypeId TypePool::float_td(uint32_t width, FloatTD::Encoding encoding) {
         throw std::invalid_argument{
             "Invalid floating point type width provided for the given encoding"};
 
-    return insert_or_get(FloatTD{.width = width, .enc = encoding});
+    return insert_or_get(FloatTD{width, encoding});
 }
 
 TypeId TypePool::vector_td(TypeId component_type_id, uint32_t component_count) {
@@ -66,8 +66,7 @@ TypeId TypePool::vector_td(TypeId component_type_id, uint32_t component_count) {
     if (component_count < 2)
         throw std::logic_error{"Cannot create vector type with component count less than 2"};
 
-    return insert_or_get(
-        VectorTD{.component_type_id = component_type_id, .component_count = component_count});
+    return insert_or_get(VectorTD{component_type_id, component_count});
 }
 
 TypeId TypePool::matrix_td(TypeId column_type_id, uint32_t column_count) {
@@ -79,7 +78,7 @@ TypeId TypePool::matrix_td(TypeId column_type_id, uint32_t column_count) {
     if (column_count < 2)
         throw std::logic_error{"Cannot create matrix type with column count less than 2"};
 
-    return insert_or_get(MatrixTD{.column_type_id = column_type_id, .column_count = column_count});
+    return insert_or_get(MatrixTD{column_type_id, column_count});
 }
 
 TypeId TypePool::array_td(TypeId element_type_id, uint32_t length) {
@@ -88,7 +87,7 @@ TypeId TypePool::array_td(TypeId element_type_id, uint32_t length) {
     if (element_type.is_void())
         throw std::logic_error{"Cannot create array type with void as element type"};
 
-    return insert_or_get(ArrayTD{.element_type_id = element_type_id, .length = length});
+    return insert_or_get(ArrayTD{element_type_id, length});
 }
 
 TypeId TypePool::method_td(TypeId ret_type, std::vector<TypeId> param_types) {
@@ -104,9 +103,32 @@ TypeId TypePool::method_td(TypeId ret_type, std::vector<TypeId> param_types) {
 
 TypeId TypePool::func_td(SymbolId fn_name) {
     if (fn_name.is_null())
-        throw std::logic_error{"Cannot create function type with null as the identifier symbol"};
+        throw std::logic_error{"Trying to create function type with null as the identifier symbol "
+                               "(use any_func_td if this is intended)"};
 
     return insert_or_get(FunctionTD{fn_name});
+}
+
+// this is separate from func_td to make creation of generic function types as explicit as possible
+TypeId TypePool::any_func_td() {
+    // doesn't register any_func into pool, it's stored separately (but in the same arena)
+    // this way a concrete function with null symbol id is treated separately from an any_func
+    if (any_func.is_null()) {
+        auto [id, mem] = arena.allocate_for<TypeDescriptor>();
+        new (mem) TypeDescriptor{FunctionTD{SymbolId::null_id()}};
+
+        any_func = TypeId{id};
+    }
+
+    return any_func;
+}
+
+bool TypePool::is_any_func(TypeId type) const {
+    return !any_func.is_null() && any_func == type;
+}
+
+bool TypePool::is_any_func(const TypeDescriptor* fn_td) const {
+    return !any_func.is_null() && &get_td(any_func) == fn_td;
 }
 
 TypeId TypePool::builtin_td(uint8_t kind) {

@@ -1,8 +1,10 @@
 #include "frontend/jl/sema.h"
 #include "base.h"
 #include "frontend/jl/dumper.h"
+#include "frontend/jl/rt/utils.h"
 #include "frontend/jl/sema.h"
 #include "julia_guard.h"
+#include "types/type_to_string.h"
 
 namespace {
 
@@ -26,6 +28,13 @@ using namespace stc::jl;
 
     assert((bt == BindingType::Global || bt == BindingType::Local) && "unaccounted binding type");
     return bt == BindingType::Global ? ScopeType::Global : ScopeType::Local;
+}
+
+[[nodiscard]] STC_FORCE_INLINE std::string_view bt_str(BindingType bt) {
+    if (bt == BindingType::Captured)
+        return "captured";
+
+    return scope_str(bt_to_st(bt));
 }
 
 } // namespace
@@ -63,6 +72,10 @@ TypeId JLSema::warn(std::string_view msg, const Expr& expr) {
 }
 
 TypeId JLSema::internal_error(std::string_view msg, const Expr& expr) {
+    // stop user errors from propagating into internal assumption errors
+    if (!_success)
+        return TypeId::null_id();
+
     std::cerr << '\n';
 
     auto [loc, file] = ctx.src_info_pool.get_loc_and_file(expr.location);
@@ -76,7 +89,11 @@ TypeId JLSema::internal_error(std::string_view msg, const Expr& expr) {
 }
 
 std::string JLSema::type_str(TypeId id) const {
-    return to_string(id, ctx.type_pool, ctx.sym_pool);
+    return type_to_string(id, ctx.type_pool, ctx.sym_pool);
+}
+
+jl_datatype_t* JLSema::to_jl_type(TypeId type) {
+    return type_to_jl.dispatch(type);
 }
 
 TypeId JLSema::visit_default_case() {
@@ -98,25 +115,50 @@ void JLSema::finalize() {
     pop_scope(true);
 }
 
+bool JLSema::check_type_against(TypeId actual_type, TypeId expected_type) const {
+    if (actual_type.is_null()) {
+        // TODO: custom error
+        return false;
+    }
+
+    if (actual_type == expected_type)
+        return true;
+
+    const auto& expected_td = tpool.get_td(expected_type);
+    auto actual_td = LazyInit{[&]() -> const TypeDescriptor& { return tpool.get_td(actual_type); }};
+
+    // TODO: subsumption, promotion
+
+    // if expected fn type has an identifier, actual has to match it
+    // if it doesnt, only the function-ness of the actual type is checked
+    if (expected_td.is_function() && actual_td.get().is_function()) {
+        auto expected_fn = expected_td.as<FunctionTD>();
+
+        return expected_fn.identifier.is_null() ||
+               expected_fn.identifier == actual_td.get().as<FunctionTD>().identifier;
+    }
+
+    return false;
+}
+
 bool JLSema::check(Expr& expr, TypeId expected_type, bool allow_pretyped) {
     bool old_pretyped_value = allow_pretyped_nodes;
     if (allow_pretyped)
         allow_pretyped_nodes = true;
 
     // method decls will, by the nature of their resolution flow, get invoked multiple times
-    if (!allow_pretyped_nodes && !expr.type.is_null() && !isa<MethodDecl>(&expr))
-        return internal_error("type check function called with an expression whose type has "
-                              "already been determined, while the allow_pretyped argument is false",
-                              expr);
+    if (!allow_pretyped_nodes && !expr.type.is_null() && !isa<MethodDecl>(&expr)) {
+        internal_error("type check function called with an expression whose type has "
+                       "already been determined, while the allow_pretyped argument is false",
+                       expr);
+        return false;
+    }
     auto prev_expected  = this->expected_type;
     this->expected_type = expected_type;
 
     TypeId actual_type = expr.type.is_null() ? impl_this()->visit(&expr) : expr.type;
 
-    // TODO: custom error for when actual_type is null
-    // TODO: subsumption
-
-    if (actual_type != expected_type) {
+    if (!check_type_against(actual_type, expected_type)) {
         fail(std::format("type mismatch during type checking: expected {}, got {}",
                          type_str(expected_type), type_str(actual_type)),
              expr);
@@ -154,7 +196,10 @@ TypeId JLSema::infer(Expr& expr, bool allow_pretyped) {
     if (inferred.is_null()) {
         expected_type        = prev_expected;
         allow_pretyped_nodes = old_pretyped_value;
-        return fail("couldn't infer type for node during type checking", expr);
+
+        // only report infer failure, if the source of the error hasn't been reported yet
+        return _success ? fail("couldn't infer type for node during type checking", expr)
+                        : TypeId::null_id();
     }
 
     expr.type = inferred;
@@ -296,6 +341,10 @@ TypeId JLSema::visit_ParamDecl(ParamDecl& pdecl) {
     }
 
     return result_type;
+}
+
+TypeId JLSema::visit_OpaqueFunction(OpaqueFunction& opaq_fn) {
+    return tpool.func_td(opaq_fn.fn_name());
 }
 
 TypeId JLSema::visit_FunctionDecl(FunctionDecl& fn_decl) {
@@ -749,7 +798,6 @@ void JLSema::visit_method_body(MethodDecl& method) {
     current_method = prev_method;
     current_fn_ret = prev_ret;
 }
-
 // TODO: structs
 
 TypeId JLSema::visit_FieldDecl(FieldDecl& fdecl) {
@@ -883,32 +931,25 @@ TypeId JLSema::visit_DeclRefExpr(DeclRefExpr& dre) {
     if (auto* decl = dyn_cast<Decl>(inner))
         return decl->type;
 
-    if (auto* sym = dyn_cast<SymbolLiteral>(inner)) {
-        auto maybe_bt = binding_of(sym->value);
+    if (auto* gref = dyn_cast<GlobalRef>(inner))
+        return fail("global refs are currently not supported", *gref);
 
-        if (!maybe_bt.has_value())
-            return internal_error(
-                std::format("symbol resolution pass failed to infer binding type for "
-                            "symbol '{}' in a declaration",
-                            ctx.get_sym(sym->value)),
-                *sym);
+    auto* sym = dyn_cast<SymbolLiteral>(inner);
+    if (sym == nullptr)
+        return internal_error("declaration reference expression points to invalid node kind", dre);
 
-        bool is_captured   = *maybe_bt == BindingType::Captured;
-        NodeId reffed_decl = find_sym(sym->value);
+    auto maybe_bt = binding_of(sym->value);
 
-        if (reffed_decl.is_null()) {
-            if (is_captured)
-                return fail(std::format("forward capture of symbol '{}' in method without explicit "
-                                        "return type. To use forward captures in a method, it's "
-                                        "required to specify the method's return type explicitly.",
-                                        ctx.get_sym(sym->value)),
-                            dre);
+    if (!maybe_bt.has_value())
+        return internal_error(std::format("symbol resolution pass failed to infer binding type for "
+                                          "symbol '{}' in a declaration",
+                                          ctx.get_sym(sym->value)),
+                              *sym);
 
-            return fail(std::format("use of undeclared or uninitialized symbol '{}'",
-                                    ctx.get_sym(sym->value)),
-                        dre);
-        }
+    bool is_captured   = *maybe_bt == BindingType::Captured;
+    NodeId reffed_decl = find_sym(sym->value);
 
+    if (!reffed_decl.is_null()) {
         auto* decl = ctx.get_and_dyn_cast<Decl>(reffed_decl);
         if (decl == nullptr)
             return internal_error("non-declaration node in symbol table", dre);
@@ -918,10 +959,34 @@ TypeId JLSema::visit_DeclRefExpr(DeclRefExpr& dre) {
         return decl->type;
     }
 
-    if (auto* gref = dyn_cast<GlobalRef>(inner))
-        return fail("global refs are currently not supported", *gref);
+    if (is_captured) {
+        return fail(
+            std::format("forward capture of symbol '{}' is not allowed", ctx.get_sym(sym->value)),
+            dre);
+    }
 
-    return internal_error("declaration reference expression points to invalid node kind", dre);
+    bool is_fn_ref = *maybe_bt == BindingType::Global && expected_type == tpool.any_func_td();
+    if (is_fn_ref) {
+        jl_function_t* jl_fn = find_jl_function(ctx.get_sym(sym->value), ctx.jl_env);
+
+        if (jl_fn == nullptr) {
+            return fail(std::format("couldn't find function '{}' in the symbol table, or in the "
+                                    "root julia module",
+                                    ctx.get_sym(sym->value)),
+                        dre);
+        }
+
+        SymbolId fn_name = ctx.sym_pool.get_id(get_jl_fn_name(jl_fn));
+
+        dre.decl = ctx.emplace_node<OpaqueFunction>(dre.location, fn_name, jl_fn).first;
+        infer(dre.decl);
+
+        return tpool.func_td(fn_name);
+    }
+
+    return fail(std::format("use of undeclared or uninitialized symbol '{}' (binding type: {})",
+                            ctx.get_sym(sym->value), bt_str(*maybe_bt)),
+                dre);
 }
 
 TypeId JLSema::visit_Assignment(Assignment& assign) {
@@ -985,6 +1050,9 @@ TypeId JLSema::visit_Assignment(Assignment& assign) {
             // infer lhs -> check rhs
             dre->decl = decl_id;
         }
+
+        if (ctx.isa<OpaqueFunction>(dre->decl))
+            return internal_error("assignment to Julia-side function is not allowed", assign);
     }
 
     TypeId target_type = infer(assign.target);
@@ -993,31 +1061,210 @@ TypeId JLSema::visit_Assignment(Assignment& assign) {
     return target_type;
 }
 
-// TODO: builtin fns, Base.return_types
-TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
-    TypeId fn_type = infer(fn_call.target_fn);
-    if (fn_type.is_null())
-        return fail("couldn't infer function type for call expression's target", fn_call);
+// TODO: add jl dumps for types
+// TODO: print inferred sig
+TypeId JLSema::ret_type_of_call(jl_function_t* fn, const std::vector<TypeId>& arg_types,
+                                const Expr& base_expr) {
+    assert(fn != nullptr);
 
-    FunctionDecl* fn_decl = nullptr;
-    if (auto* fn_dre = ctx.get_and_dyn_cast<DeclRefExpr>(fn_call.target_fn)) {
-        if (fn_dre->decl.is_null())
-            return internal_error("empty declaration in function call's target", fn_call);
+    // only actually alloc and init string if needed for an error msg
+    auto error_suffix = LazyInit{[&]() -> std::string {
+        return std::format("(in call to function '{}')", get_jl_fn_name(fn));
+    }};
 
-        Expr* decl_expr = ctx.get_node(fn_dre->decl);
-        assert(decl_expr != nullptr);
+    jl_value_t* type_tuple  = nullptr;
+    jl_value_t* res_jl_type = nullptr;
+    JL_GC_PUSH2(&type_tuple, &res_jl_type);
 
-        auto* decl = dyn_cast<Decl>(decl_expr);
-        assert(decl != nullptr);
+    // TODO: test
+    ScopeGuard jl_gc_pop_guard{[&]() { JL_GC_POP(); }};
 
-        fn_decl = dyn_cast<FunctionDecl>(decl_expr);
+    jl_function_t* ret_type_fn = ctx.jl_env.module_cache.comp_mod.get_fn("return_type");
 
-        if (fn_decl == nullptr)
+    std::vector<jl_value_t*> arg_jl_types{};
+    arg_jl_types.reserve(arg_types.size());
+    for (TypeId arg_type : arg_types) {
+        jl_datatype_t* dt = to_jl_type(arg_type);
+
+        if (dt == nullptr) {
+            return fail(std::format("argument of type '{}' cannot participate in function call "
+                                    "return type resolution {}",
+                                    type_str(arg_type), error_suffix.get()),
+                        base_expr);
+        }
+
+        arg_jl_types.emplace_back(reinterpret_cast<jl_value_t*>(dt));
+    }
+
+    type_tuple  = jl_apply_tuple_type_v(arg_jl_types.data(), arg_jl_types.size());
+    res_jl_type = jl_call2(ret_type_fn, fn, type_tuple);
+
+    if (check_exceptions()) {
+        std::cerr << "the above julia exception occured while trying to resolve the return type of "
+                     "a function call\n";
+
+        return fail(std::format("couldn't infer return type for call {}", error_suffix.get()),
+                    base_expr);
+    }
+
+    if (res_jl_type == reinterpret_cast<jl_value_t*>(jl_bottom_type)) { // Union{}
+        // either function is not callable with given signature, or function body never returns
+        // normally (e.g. throw, infinite loop, etc. on every branch)
+
+        // it's not worth it to check hasmethod earlier, since for non-bottom returning cases, it's
+        // implied to be true (and so the happy path performs one less julia call)
+
+        jl_function_t* has_method_fn = ctx.jl_env.module_cache.base_mod.get_fn("hasmethod");
+        jl_value_t* has_method_val   = jl_call2(has_method_fn, fn, type_tuple);
+
+        if (check_exceptions()) {
+            std::cerr << "the above Julia exception occured while trying to check if a function "
+                         "has a specific signature\n";
+
+            return internal_error(
+                std::format("couldn't retrieve call signature validity for function after return "
+                            "type has been inferred to be bottom {}",
+                            error_suffix.get()),
+                base_expr);
+        }
+
+        if (has_method_val == jl_false) {
             return fail(
-                std::format("call to non-function symbol '{}'", ctx.get_sym(decl->identifier)),
-                fn_call);
-    } else {
+                std::format("no method matching the signature inferred from the arguments {}",
+                            error_suffix.get()),
+                base_expr);
+        }
+
+        return fail(std::format("Julia inferred bottom as the return type, meaning the function "
+                                "execution never exits normally {}",
+                                error_suffix.get()),
+                    base_expr);
+    }
+
+    if (!jl_is_datatype(res_jl_type) || !jl_is_concrete_type(res_jl_type)) {
+        return fail(
+            std::format("Julia could only infer a non-concrete return type {}", error_suffix.get()),
+            base_expr);
+    }
+
+    TypeId res_type = parse_jl_type(safe_cast<jl_datatype_t>(res_jl_type), ctx);
+
+    if (res_type.is_null())
+        return fail(std::format("Julia inferred an unsupported return type {}", error_suffix.get()),
+                    base_expr);
+
+    return res_type;
+}
+
+// nullopt -> error occured
+// nullptr -> method not found
+std::optional<MethodDecl*> JLSema::find_sig_match(const FunctionDecl& fn_decl,
+                                                  const std::vector<TypeId>& arg_types,
+                                                  const Expr& base_expr) {
+    MethodDecl* target_method = nullptr;
+    for (NodeId method_id : fn_decl.methods) {
+        auto* mdecl = ctx.get_and_dyn_cast<MethodDecl>(method_id);
+
+        if (mdecl == nullptr) {
+            internal_error(std::format("non-method-declaration node in method list of "
+                                       "function declaration for symbol '{}'",
+                                       ctx.get_sym(fn_decl.identifier)),
+                           fn_decl);
+            return std::nullopt;
+        }
+
+        if (arg_types.size() > mdecl->param_decls.size())
+            continue;
+
+        auto arg_it    = arg_types.begin();
+        bool sig_match = true;
+        for (NodeId param_id : mdecl->param_decls) {
+            auto* pdecl = ctx.get_and_dyn_cast<ParamDecl>(param_id);
+
+            if (pdecl == nullptr) {
+                internal_error(std::format("non-parameter-declaration node in parameter list of "
+                                           "method declaration for symbol '{}'",
+                                           ctx.get_sym(mdecl->identifier)),
+                               *mdecl);
+                return std::nullopt;
+            }
+
+            if (arg_it == arg_types.end()) {
+                // assumes that if the current param is default initializable, all the rest are too
+                // if not, that should've be caught as an error by the method decl visitor
+                if (pdecl->default_initializer.is_null())
+                    sig_match = false;
+
+                break;
+            }
+
+            if (!check_type_against(*arg_it, pdecl->type)) {
+                sig_match = false;
+                break;
+            }
+
+            arg_it++;
+        }
+
+        if (sig_match) {
+            if (mdecl->ret_type.is_null()) {
+                if (mdecl == current_method) {
+                    fail(std::format("recursion on method with implicit return type is not "
+                                     "allowed (call to '{}')",
+                                     ctx.get_sym(mdecl->identifier)),
+                         base_expr);
+                    return std::nullopt;
+                } else {
+                    fail(std::format(
+                             "call to method '{}' with implicit return type, which has not been "
+                             "inferred yet (this is most likely the result of mutually recursive "
+                             "methods with implicit return types, which is not allowed)",
+                             ctx.get_sym(mdecl->identifier)),
+                         base_expr);
+                    return std::nullopt;
+                }
+            }
+
+            target_method = mdecl;
+            break;
+        }
+    }
+
+    return target_method;
+}
+
+// TODO: Core.Compiler.return_type
+TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
+    bool is_valid_fn = check(fn_call.target_fn, tpool.any_func_td());
+    if (!is_valid_fn)
+        return fail("call expression's target couldn't be checked to have function type", fn_call);
+
+    auto* fn_dre = ctx.get_and_dyn_cast<DeclRefExpr>(fn_call.target_fn);
+
+    if (fn_dre == nullptr)
         return internal_error("unexpected node kind as function call's target", fn_call);
+
+    FunctionDecl* fn_decl   = nullptr;
+    OpaqueFunction* opaq_fn = nullptr;
+
+    if (fn_dre->decl.is_null())
+        return internal_error("empty declaration in function call's target", fn_call);
+
+    Expr* decl_expr = ctx.get_node(fn_dre->decl);
+    assert(decl_expr != nullptr);
+
+    const auto* decl_base = dyn_cast<Decl>(decl_expr);
+    assert(decl_base != nullptr);
+
+    fn_decl = dyn_cast<FunctionDecl>(decl_expr);
+
+    if (fn_decl == nullptr)
+        opaq_fn = dyn_cast<OpaqueFunction>(decl_expr);
+
+    if (fn_decl == nullptr && opaq_fn == nullptr) {
+        return fail(
+            std::format("call to non-function symbol '{}'", ctx.get_sym(decl_base->identifier)),
+            fn_call);
     }
 
     std::vector<TypeId> arg_types{};
@@ -1041,79 +1288,26 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
 
     assert(arg_types.size() == fn_call.args.size());
 
-    MethodDecl* target_method = nullptr;
-    for (NodeId method_id : fn_decl->methods) {
-        auto* mdecl = ctx.get_and_dyn_cast<MethodDecl>(method_id);
+    if (fn_decl != nullptr) {
+        auto target_method = find_sig_match(*fn_decl, arg_types, fn_call);
 
-        if (mdecl == nullptr)
-            return internal_error(std::format("non-method-declaration node in method list of "
-                                              "function declaration for symbol '{}'",
-                                              ctx.get_sym(fn_decl->identifier)),
-                                  *fn_decl);
+        if (!target_method.has_value())
+            return TypeId::null_id();
 
-        if (arg_types.size() > mdecl->param_decls.size())
-            continue;
-
-        auto arg_it    = arg_types.begin();
-        bool sig_match = true;
-        for (NodeId param_id : mdecl->param_decls) {
-            auto* pdecl = ctx.get_and_dyn_cast<ParamDecl>(param_id);
-
-            if (pdecl == nullptr)
-                return internal_error(
-                    std::format("non-parameter-declaration node in parameter list of "
-                                "method declaration for symbol '{}'",
-                                ctx.get_sym(mdecl->identifier)),
-                    *mdecl);
-
-            if (arg_it == arg_types.end()) {
-                // assumes that if the current param is default initializable, all the rest are too
-                // if not, that should've be caught as an error by the method decl visitor
-                if (pdecl->default_initializer.is_null())
-                    sig_match = false;
-
-                break;
-            }
-
-            // TODO: subsumption
-            if (*arg_it != pdecl->type) {
-                sig_match = false;
-                break;
-            }
-
-            arg_it++;
+        if (*target_method == nullptr) {
+            return fail(
+                std::format("no method matches inferred argument types for function call to '{}'",
+                            ctx.get_sym(fn_decl->identifier)),
+                fn_call);
         }
 
-        if (sig_match) {
-            if (mdecl->ret_type.is_null()) {
-                if (mdecl == current_method) {
-                    return fail(std::format("recursion on method with implicit return type is not "
-                                            "allowed (call to '{}')",
-                                            ctx.get_sym(mdecl->identifier)),
-                                fn_call);
-                } else {
-                    return fail(
-                        std::format(
-                            "call to method '{}' with implicit return type, which has not been "
-                            "inferred yet (this is most likely a result of mutually recursive "
-                            "methods with implicit return types, which is not allowed)",
-                            ctx.get_sym(mdecl->identifier)),
-                        fn_call);
-                }
-            }
-
-            target_method = mdecl;
-            break;
-        }
+        return (*target_method)->ret_type;
     }
 
-    if (target_method == nullptr)
-        return fail(
-            std::format("no method matches inferred argument types for function call to '{}'",
-                        ctx.get_sym(fn_decl->identifier)),
-            fn_call);
+    assert(opaq_fn != nullptr);
 
-    return target_method->ret_type;
+    // ret_type_of_call should already print any error necessary
+    return ret_type_of_call(opaq_fn->jl_function, arg_types, fn_call);
 }
 
 TypeId JLSema::visit_IfExpr(IfExpr& if_) {

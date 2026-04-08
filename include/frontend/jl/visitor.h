@@ -29,7 +29,7 @@ public:
 
         #define X(type, kind)                                                                  \
             case (NodeKind::kind):                                                             \
-                return this->impl_this()->visit_##type(this->template as<type>(node));
+                return this->impl_this()->visit_##type(*static_cast<type*>(node));
 
             #include "frontend/jl/node_defs/all_nodes.def"
         #undef X

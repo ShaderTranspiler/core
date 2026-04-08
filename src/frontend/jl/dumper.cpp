@@ -1,4 +1,6 @@
 #include "frontend/jl/dumper.h"
+#include "frontend/jl/utils.h"
+#include "types/type_to_string.h"
 
 namespace {
 
@@ -43,7 +45,7 @@ std::string decl_type_str(Decl* decl) {
 namespace stc::jl {
 
 std::string JLDumper::type_str(TypeId type_id) const {
-    return to_string(type_id, ctx.type_pool, ctx.sym_pool);
+    return type_to_string(type_id, ctx.type_pool, ctx.sym_pool);
 }
 
 std::string_view JLDumper::sym(SymbolId sym_id) const {
@@ -99,7 +101,7 @@ bool JLDumper::pre_visit_ptr(Expr* expr) {
 
 void JLDumper::visit_VarDecl(VarDecl& var) {
     out << indent() << "VarDecl (" << scope_str(var.scope()) << "): " << sym(var.identifier) << " ("
-        << type_str(var.annot_type) << ")\n";
+        << (!var.annot_type.is_null() ? type_str(var.annot_type) : "unannotated") << ")\n";
 
     if (!var.initializer.is_null()) {
         out << indent() << dump_label("initializer");
@@ -145,6 +147,10 @@ void JLDumper::visit_ParamDecl(ParamDecl& param) {
         visit(param.default_initializer);
         dec_indent();
     }
+}
+
+void JLDumper::visit_OpaqueFunction(OpaqueFunction& fn) {
+    out << indent() << "OpaqueFunction: " << sym(fn.fn_name()) << '@' << fn.jl_function << '\n';
 }
 
 void JLDumper::visit_StructDecl(StructDecl& struct_) {
@@ -241,7 +247,18 @@ void JLDumper::visit_DeclRefExpr(DeclRefExpr& dre) {
 }
 
 void JLDumper::visit_Assignment(Assignment& assign) {
-    out << indent() << "Assignment: \n";
+    out << indent() << "Assignment" << (assign.is_implicit_decl() ? " (with implicit decl)" : "")
+        << ": \n";
+
+    if (assign.is_implicit_decl()) {
+        out << indent() << dump_label("implicit decl");
+        inc_indent();
+
+        const auto* dre = ctx.get_and_dyn_cast<DeclRefExpr>(assign.target);
+        visit(dre->decl);
+
+        dec_indent();
+    }
 
     out << indent() << dump_label("target");
     inc_indent();
