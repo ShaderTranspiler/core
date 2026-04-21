@@ -11,7 +11,7 @@
 namespace stc::jl {
 
 class JLParser {
-    JLCtx ctx;
+    JLCtx& ctx;
     rt::JuliaSymbolCache& sym_cache;
 
     SrcLocationId cur_loc;
@@ -20,22 +20,16 @@ class JLParser {
 public:
     std::optional<std::string> fallback_file = std::nullopt;
 
-    explicit JLParser()
-        : ctx{}, sym_cache{ctx.jl_env.symbol_cache} {
+    explicit JLParser(JLCtx& ctx)
+        : ctx{ctx}, sym_cache{ctx.jl_env.symbol_cache} {
 
         std::ignore = ctx.src_info_pool.get_file("dummy file");
         cur_loc     = ctx.src_info_pool.get_location(1, 1);
     }
 
-    explicit JLParser(TranspilerConfig config)
-        : JLParser{} {
-        ctx.config = std::move(config);
-    }
-
     NodeId parse(jl_value_t* node);
     NodeId parse_code(std::string_view code);
 
-    [[nodiscard]] JLCtx&& steal_ctx() { return std::move(ctx); }
     bool success() const { return _success; }
 
 private:

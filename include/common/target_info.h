@@ -11,7 +11,7 @@ using namespace stc::types;
 
 // serves as an "oracle" for backend capabilities in early passes, to keep things as
 // backend-agnostic as possible
-class BackendInfo {
+class TargetInfo {
 protected:
     using TypeList = std::vector<TypeId>;
 
@@ -43,7 +43,7 @@ protected:
     FnList functions;
 
 public:
-    explicit BackendInfo(GlobalList builtin_globals, FnList builtin_fns)
+    explicit TargetInfo(GlobalList builtin_globals, FnList builtin_fns)
         : globals{std::move(builtin_globals)}, functions{std::move(builtin_fns)} {
 
         assert(std::is_sorted(globals.begin(), globals.end(),
@@ -59,7 +59,12 @@ public:
                "unsorted functions list in backend info");
     }
 
-    virtual ~BackendInfo() = default;
+    virtual ~TargetInfo() = default;
+
+    TargetInfo(const TargetInfo&)            = default;
+    TargetInfo& operator=(const TargetInfo&) = default;
+    TargetInfo(TargetInfo&&)                 = default;
+    TargetInfo& operator=(TargetInfo&&)      = default;
 
     bool has_builtin_fn(std::string_view fn_name) const;
     bool has_builtin_fn(std::string_view fn_name, const TypeList& arg_types,
@@ -74,7 +79,8 @@ public:
     bool has_builtin_global(std::string_view global_name) const;
     TypeId builtin_global_ty(std::string_view global_name) const;
 
-    virtual bool can_implicit_cast(TypeId src_ty, TypeId dest_ty) const = 0;
+    virtual bool valid_ctor_call(TypeId target, const TypeList& arg_types) const = 0;
+    virtual bool can_implicit_cast(TypeId src_ty, TypeId dest_ty) const          = 0;
 
 private:
     const BuiltinFunction* get_builtin_fn(std::string_view fn_name) const;

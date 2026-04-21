@@ -560,6 +560,10 @@ TypeId JLSema::visit_OpaqueFunction(OpaqueFunction& opaq_fn) {
     return tpool.func_td(opaq_fn.fn_name());
 }
 
+TypeId JLSema::visit_BuiltinFunction(BuiltinFunction& builtin_fn) {
+    return tpool.func_td(builtin_fn.fn_name());
+}
+
 TypeId JLSema::visit_FunctionDecl(FunctionDecl& fn_decl) {
     if (fn_decl.identifier.is_null())
         return internal_error("function declaration with null as the identifier symbol", fn_decl);
@@ -1155,7 +1159,6 @@ TypeId JLSema::visit_CompoundExpr(CompoundExpr& cmpd) {
 // TODO: value checks for some of these
 DEFINE_LIT(Bool)
 DEFINE_LIT(Int32)
-DEFINE_LIT(Int64)
 DEFINE_LIT(UInt8)
 DEFINE_LIT(UInt16)
 DEFINE_LIT(UInt32)
@@ -1165,6 +1168,18 @@ DEFINE_LIT(Float32)
 DEFINE_LIT(Float64)
 
 #undef DEFINE_LIT
+
+TypeId JLSema::visit_Int64Literal(Int64Literal& i64_lit) {
+    constexpr int32_t i32_min = std::numeric_limits<int32_t>::min();
+    constexpr int32_t i32_max = std::numeric_limits<int32_t>::max();
+
+    // coerce i64 literals into i32 whenever possible
+    if (i32_min <= i64_lit.value && i64_lit.value <= i32_max) {
+        return ctx.jl_Int32_t();
+    }
+
+    return ctx.jl_Int64_t();
+}
 
 TypeId JLSema::visit_StringLiteral(StringLiteral& str_lit) {
     if (!visiting_indexer)
@@ -1423,12 +1438,13 @@ TypeId JLSema::visit_DeclRefExpr(DeclRefExpr& dre) {
         return tpool.func_td(fn_name_id);
     }
 
-    auto maybe_bt = binding_of(sym->value);
+    auto fn_name_str = ctx.get_sym(sym->value);
+    auto maybe_bt    = binding_of(sym->value);
 
     if (!maybe_bt.has_value())
         return internal_error(std::format("symbol resolution pass failed to infer binding type for "
                                           "symbol '{}' in a declaration",
-                                          ctx.get_sym(sym->value)),
+                                          fn_name_str),
                               *sym);
 
     bool is_captured   = *maybe_bt == BindingType::Captured;
@@ -1445,29 +1461,33 @@ TypeId JLSema::visit_DeclRefExpr(DeclRefExpr& dre) {
     }
 
     if (is_captured) {
-        return fail(
-            std::format("forward capture of symbol '{}' is not allowed", ctx.get_sym(sym->value)),
-            dre);
+        return fail(std::format("forward capture of symbol '{}' is not allowed", fn_name_str), dre);
     }
 
     bool is_fn_ref = *maybe_bt == BindingType::Global && tpool.is_any_func(expected_type);
     if (is_fn_ref) {
-        // try to resolve in JuliaGLM first
-        jl_function_t* jl_fn =
-            ctx.jl_env.module_cache.glm_mod.get_fn(ctx.get_sym(sym->value), false);
+        // TODO
+        // builtins hide calls to jl fns, if they'd have a valid match, while the builtin doesnt
+
+        // try to resolve through builtins first
+        if (ctx.target_info != nullptr && ctx.target_info->has_builtin_fn(fn_name_str)) {
+            dre.decl = ctx.emplace_node<BuiltinFunction>(dre.location, sym->value).first;
+            infer(dre.decl);
+
+            return tpool.func_td(sym->value);
+        }
+
+        // try to resolve in JuliaGLM before any other module
+        jl_function_t* jl_fn = ctx.jl_env.module_cache.glm_mod.get_fn(fn_name_str, false);
 
         if (jl_fn == nullptr)
-            jl_fn = find_jl_function(ctx.get_sym(sym->value), ctx.jl_env, false);
+            jl_fn = find_jl_function(fn_name_str, ctx.jl_env, false);
 
         if (jl_fn == nullptr) {
             return fail(std::format("couldn't find function '{}' in the symbol table, or in the "
                                     "root julia module",
-                                    ctx.get_sym(sym->value)),
+                                    fn_name_str),
                         dre);
-        }
-
-        if (jl_is_type(jl_fn)) {
-            // TODO: ctors
         }
 
         SymbolId fn_name = ctx.sym_pool.get_id(get_jl_fn_name(jl_fn));
@@ -1475,9 +1495,10 @@ TypeId JLSema::visit_DeclRefExpr(DeclRefExpr& dre) {
         dre.decl = ctx.emplace_node<OpaqueFunction>(dre.location, fn_name, jl_fn).first;
         infer(dre.decl);
 
-        if (ctx.config.warn_on_jl_sema_query)
-            warn(std::format("had to resolve function reference through julia for symbol '{}'",
-                             ctx.get_sym(fn_name)),
+        if (!jl_is_type(jl_fn) && ctx.config.warn_on_jl_sema_query)
+            warn(std::format("had to resolve function reference through julia for non-type "
+                             "referring symbol '{}'",
+                             fn_name_str),
                  dre);
 
         return tpool.func_td(fn_name);
@@ -1760,8 +1781,10 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
     if (fn_dre == nullptr)
         return internal_error("unexpected node kind as function call's target", fn_call);
 
-    FunctionDecl* fn_decl   = nullptr;
-    OpaqueFunction* opaq_fn = nullptr;
+    // exactly one of these should be non-nullptr by the end of resolution
+    FunctionDecl* fn_decl       = nullptr;
+    OpaqueFunction* opaq_fn     = nullptr;
+    BuiltinFunction* builtin_fn = nullptr;
 
     if (fn_dre->decl.is_null())
         return internal_error("empty declaration in function call's target", fn_call);
@@ -1775,9 +1798,12 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
     fn_decl = dyn_cast<FunctionDecl>(decl_expr);
 
     if (fn_decl == nullptr)
+        builtin_fn = dyn_cast<BuiltinFunction>(decl_expr);
+
+    if (fn_decl == nullptr)
         opaq_fn = dyn_cast<OpaqueFunction>(decl_expr);
 
-    if (fn_decl == nullptr && opaq_fn == nullptr) {
+    if (fn_decl == nullptr && opaq_fn == nullptr && builtin_fn == nullptr) {
         return fail(
             std::format("call to non-function symbol '{}'", ctx.get_sym(decl_base->identifier)),
             fn_call);
@@ -1820,7 +1846,38 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
         return (*target_method)->ret_type;
     }
 
+    if (builtin_fn != nullptr) {
+        assert(ctx.target_info != nullptr);
+
+        std::string_view fn_name_str = ctx.get_sym(builtin_fn->fn_name());
+
+        TypeId ret_ty = ctx.target_info->builtin_fn_ret_ty(fn_name_str, arg_types);
+        if (ret_ty.is_null()) {
+            return fail(std::format("builtin function does not have an overload for the inferred "
+                                    "argument types (in call to '{}')",
+                                    fn_name_str),
+                        fn_call);
+        }
+
+        return ret_ty;
+    }
+
     assert(opaq_fn != nullptr);
+
+    // try to handle ctors separately first
+    if (jl_is_datatype(opaq_fn->jl_function)) {
+        auto* dt = safe_cast<jl_datatype_t>(opaq_fn->jl_function);
+
+        TypeId target_type = parse_jl_type(dt, ctx);
+
+        if (ctx.target_info != nullptr &&
+            ctx.target_info->valid_ctor_call(target_type, arg_types)) {
+
+            opaq_fn->set_is_ctor(true);
+
+            return target_type;
+        }
+    }
 
     // ret_type_of_jl_call should already print any error necessary
     return ret_type_of_jl_call(opaq_fn->jl_function, arg_types, fn_call);

@@ -259,6 +259,15 @@ void SIRDumper::visit_FunctionCall(FunctionCall& fn_call) {
     dec_indent();
 }
 
+void SIRDumper::visit_ConstructorCall(ConstructorCall& ctor_call) {
+    out << indent() << "ConstructorCall: '" << type_str(ctor_call.type()) << "'\n";
+
+    inc_indent();
+    for (NodeId arg : ctor_call.args)
+        visit(arg);
+    dec_indent();
+}
+
 void SIRDumper::visit_DeclRefExpr(DeclRefExpr& decl_ref) {
     NodeBase* node = ctx.get_node(decl_ref.decl);
 

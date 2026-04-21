@@ -31,10 +31,9 @@ using namespace stc::types;
     STC_GL_INIT_MAT_N(prefix, 2), STC_GL_INIT_MAT_N(prefix, 3), STC_GL_INIT_MAT_N(prefix, 4)
 
 class GLSLTypes {
-private:
+public:
     TypePool& type_pool;
 
-public:
     explicit GLSLTypes(TypePool& type_pool)
         : type_pool{type_pool},
           gl_void{type_pool.void_td()},
@@ -71,6 +70,45 @@ public:
     }
     [[nodiscard]] TypeId gl_matNxM(uint32_t n, uint32_t m) { return gl_TmatNxM(gl_float, n, m); }
     [[nodiscard]] TypeId gl_dmatNxM(uint32_t n, uint32_t m) { return gl_TmatNxM(gl_double, n, m); }
+
+    [[nodiscard]] bool is_gl_scalar_type(TypeId T) const {
+        return T == gl_float || T == gl_double || T == gl_bool || T == gl_int || T == gl_uint;
+    }
+
+    [[nodiscard]] bool is_gl_vec_type(TypeId T) const {
+        if (T.is_null())
+            return false;
+
+        const auto& td = type_pool.get_td(T);
+
+        if (!td.is_vector())
+            return false;
+
+        VectorTD vec_td = td.as<VectorTD>();
+        TypeId el_type  = vec_td.component_type_id;
+
+        return 2 <= vec_td.component_count && vec_td.component_count <= 4 &&
+               is_gl_scalar_type(el_type);
+    }
+
+    [[nodiscard]] bool is_gl_mat_type(TypeId T) const {
+        if (T.is_null())
+            return false;
+
+        const auto& td = type_pool.get_td(T);
+
+        if (!td.is_matrix())
+            return false;
+
+        MatrixTD mat_td = td.as<MatrixTD>();
+        TypeId col_type = mat_td.column_type_id;
+
+        return 2 <= mat_td.column_count && mat_td.column_count <= 4 && is_gl_vec_type(col_type);
+    }
+
+    [[nodiscard]] bool is_gl_type(TypeId T) const {
+        return T == gl_void || is_gl_scalar_type(T) || is_gl_vec_type(T) || is_gl_mat_type(T);
+    }
 };
 
 #undef STC_GL_INIT_MATS

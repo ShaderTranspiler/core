@@ -6,6 +6,27 @@
 namespace {
 using namespace stc::glsl::builtins;
 
+consteval BuiltinType try_resolve_gen_el_type(BuiltinType t) {
+    using enum BuiltinType;
+
+    if (FirstGenericFloat <= t && t <= LastGenericFloat)
+        return Float;
+
+    if (FirstGenericDouble <= t && t <= LastGenericDouble)
+        return Double;
+
+    if (FirstGenericBool <= t && t <= LastGenericBool)
+        return Bool;
+
+    if (FirstGenericInt <= t && t <= LastGenericInt)
+        return Int;
+
+    if (FirstGenericUInt <= t && t <= LastGenericUInt)
+        return UInt;
+
+    return t;
+}
+
 consteval BuiltinType try_resolve_generic(BuiltinType t, uint8_t n) {
     using enum BuiltinType;
 
@@ -15,7 +36,7 @@ consteval BuiltinType try_resolve_generic(BuiltinType t, uint8_t n) {
     if (is_genvec(t) && n == 1)
         throw "trying to resolve vector generic with n = 1 (only allowed for GenTypes)";
 
-    BuiltinType el_type = el_type_or_self(t);
+    BuiltinType el_type = try_resolve_gen_el_type(t);
 
     if (el_type == t)
         return t;

@@ -151,7 +151,12 @@ void JLDumper::visit_ParamDecl(ParamDecl& param) {
 }
 
 void JLDumper::visit_OpaqueFunction(OpaqueFunction& fn) {
-    out << indent() << "OpaqueFunction: " << sym(fn.fn_name()) << '@' << fn.jl_function << '\n';
+    out << indent() << "OpaqueFunction" << (fn.is_ctor() ? " (ctor)" : "") << ": "
+        << sym(fn.fn_name()) << '@' << fn.jl_function << '\n';
+}
+
+void JLDumper::visit_BuiltinFunction(BuiltinFunction& fn) {
+    out << indent() << "BuiltinFunction: " << sym(fn.fn_name()) << '\n';
 }
 
 void JLDumper::visit_StructDecl(StructDecl& struct_) {

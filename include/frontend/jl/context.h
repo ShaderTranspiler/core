@@ -29,11 +29,12 @@ public:
     #undef X
     // clang-format on
 
-    explicit JLCtx(NodeId::id_type node_arena_kb            = 128U,
+    explicit JLCtx(const TargetInfo* target_info = nullptr, NodeId::id_type node_arena_kb = 128U,
                    SrcLocationId::id_type src_info_arena_kb = 128U,
                    TypeId::id_type type_arena_kb = 32U, SymbolId::id_type sym_arena_kb = 64U,
                    ModuleId::id_type module_arena_b = 128_u8)
         : ASTCtx{{{BuiltinTypeKind::Nothing}, {BuiltinTypeKind::String}, {BuiltinTypeKind::Symbol}},
+                 target_info,
                  node_arena_kb,
                  src_info_arena_kb,
                  type_arena_kb,

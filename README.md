@@ -20,8 +20,8 @@ Here is a (very) rough overview of the development timeline and its current prog
 - [x] Julia parsing
 - [x] Julia type inference (bidirectional typing)
 - [x] Configuration API
-- [ ] Vector, matrix and array types
-- [ ] Builtin function sema system, GLSL builtins
+- [x] Vector, matrix and array types
+- [x] Builtin function sema system, GLSL builtins
 - [ ] Qualified types [mostly done, not yet integrated]
 - [ ] Julia Pkg API [cpp-side mostly done]
 - [ ] Expand supported Julia and GLSL language subsets

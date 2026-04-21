@@ -226,8 +226,10 @@ struct ParamDecl : public Decl {
 struct OpaqueFunction : public Decl {
     jl_function_t* jl_function;
 
-    explicit OpaqueFunction(SrcLocationId location, SymbolId fn_name, jl_function_t* jl_function)
-        : Decl{location, NodeKind::OpaqFn, fn_name}, jl_function{jl_function} {
+    explicit OpaqueFunction(SrcLocationId location, SymbolId fn_name, jl_function_t* jl_function,
+                            bool is_ctor = false)
+        : Decl{location, NodeKind::OpaqFn, fn_name, static_cast<uint8_t>(is_ctor)},
+          jl_function{jl_function} {
 
         assert(jl_function != nullptr &&
                "trying to store nullptr in OpaqueFunction's raw julia function pointer");
@@ -235,7 +237,19 @@ struct OpaqueFunction : public Decl {
 
     SymbolId fn_name() const { return identifier; }
 
+    bool is_ctor() const { return static_cast<bool>(node_storage()); }
+    void set_is_ctor(bool new_value) { _node_storage = static_cast<uint8_t>(new_value); }
+
     SAME_NODE_KIND_DEF(NodeKind::OpaqFn)
+};
+
+struct BuiltinFunction : public Decl {
+    explicit BuiltinFunction(SrcLocationId location, SymbolId fn_name)
+        : Decl{location, NodeKind::BuiltinFn, fn_name} {}
+
+    SymbolId fn_name() const { return identifier; }
+
+    SAME_NODE_KIND_DEF(NodeKind::BuiltinFn)
 };
 
 // FEATURE: support for parametric types

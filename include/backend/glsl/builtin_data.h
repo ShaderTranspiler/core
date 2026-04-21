@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string_view>
 
-// ! This header is only meant to be included in GLSLBackendInfo's implementation
+// ! This header is only meant to be included in GLSLTargetInfo's implementation
 // ! This allows defining the underlying constant builtin data without exposing it into the lib
 
 namespace stc::glsl::builtins {
@@ -27,21 +27,14 @@ enum class BuiltinType : uint8_t {
     Float,
     Double,
 
-    InOutInt  = Int,
-    InOutUInt = UInt,
-
     STC_DEF_VEC_ENUMS(F),
     STC_DEF_VEC_ENUMS(D),
     STC_DEF_VEC_ENUMS(B),
     STC_DEF_VEC_ENUMS(I),
     STC_DEF_VEC_ENUMS(U),
-    FirstVec = Vec2F,
-    LastVec  = Vec4U,
 
     STC_DEF_MAT_ENUMS(F),
     STC_DEF_MAT_ENUMS(D),
-    FirstMat = Mat2x2F,
-    LastMat  = Mat4x4D,
 
     FirstGenericFloat,
     VecF = FirstGenericFloat,
@@ -71,6 +64,13 @@ enum class BuiltinType : uint8_t {
     GenU,
     OutGenU         = GenU,
     LastGenericUInt = OutGenU,
+
+    InOutInt  = Int,
+    InOutUInt = UInt,
+    FirstVec  = Vec2F,
+    LastVec   = Vec4U,
+    FirstMat  = Mat2x2F,
+    LastMat   = Mat4x4D
 };
 
 #undef STC_DEF_MAT_ENUMS
@@ -119,25 +119,59 @@ inline constexpr bool is_mat(BuiltinType ty) {
     return BuiltinType::FirstMat <= ty && ty <= BuiltinType::LastMat;
 }
 
-inline constexpr BuiltinType el_type_or_self(BuiltinType t) {
+inline constexpr BuiltinType el_type(BuiltinType ty) {
     using enum BuiltinType;
 
-    if (FirstGenericFloat <= t && t <= LastGenericFloat)
-        return Float;
+    if (!is_vec(ty) && !is_mat(ty))
+        throw std::logic_error{"trying to call el_type on non-vector, non-matrix builtin type"};
 
-    if (FirstGenericDouble <= t && t <= LastGenericDouble)
-        return Double;
+    switch (ty) {
+        case Vec2F:
+        case Vec3F:
+        case Vec4F:
+        case Mat2x2F:
+        case Mat2x3F:
+        case Mat2x4F:
+        case Mat3x2F:
+        case Mat3x3F:
+        case Mat3x4F:
+        case Mat4x2F:
+        case Mat4x3F:
+        case Mat4x4F:
+            return Float;
 
-    if (FirstGenericBool <= t && t <= LastGenericBool)
-        return Bool;
+        case Vec2D:
+        case Vec3D:
+        case Vec4D:
+        case Mat2x2D:
+        case Mat2x3D:
+        case Mat2x4D:
+        case Mat3x2D:
+        case Mat3x3D:
+        case Mat3x4D:
+        case Mat4x2D:
+        case Mat4x3D:
+        case Mat4x4D:
+            return Double;
 
-    if (FirstGenericInt <= t && t <= LastGenericInt)
-        return Int;
+        case Vec2B:
+        case Vec3B:
+        case Vec4B:
+            return Bool;
 
-    if (FirstGenericUInt <= t && t <= LastGenericUInt)
-        return UInt;
+        case Vec2I:
+        case Vec3I:
+        case Vec4I:
+            return Int;
 
-    return t;
+        case Vec2U:
+        case Vec3U:
+        case Vec4U:
+            return UInt;
+
+        default:
+            throw std::logic_error{"unaccounted collection type in el_type"};
+    }
 }
 
 inline constexpr uint8_t el_count(BuiltinType ty) {

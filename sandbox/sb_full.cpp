@@ -2,6 +2,7 @@
 JULIA_DEFINE_FAST_TLS
 
 #include <backend/glsl/code_gen.h>
+#include <backend/glsl/target_info.h>
 #include <frontend/jl/dumper.h>
 #include <frontend/jl/lowering.h>
 #include <frontend/jl/parser.h>
@@ -48,7 +49,15 @@ int transpile(std::string_view code, std::string file_path, stc::TranspilerConfi
 
     auto start = clock::now();
 
-    JLParser parser{std::move(config)};
+    JLCtx ctx{};
+    ctx.config = std::move(config);
+
+    const auto& target_info = glsl::GLSLTargetInfo::get(ctx.type_pool);
+    ctx.target_info         = &target_info;
+
+    auto init_done = clock::now();
+
+    JLParser parser{ctx};
     parser.fallback_file = file_path;
 
     NodeId jl_ast = parser.parse_code(code);
@@ -57,8 +66,6 @@ int transpile(std::string_view code, std::string file_path, stc::TranspilerConfi
         std::cerr << "\nJulia parser failed" << std::endl;
         return 1;
     }
-
-    JLCtx ctx{parser.steal_ctx()};
 
     auto parser_done = clock::now();
 
@@ -149,7 +156,8 @@ int transpile(std::string_view code, std::string file_path, stc::TranspilerConfi
         }
     }
 
-    std::cout << "\nParser finished in " << format_duration(parser_done - start) << '\n';
+    std::cout << "\nCtx init finished in " << format_duration(init_done - start) << '\n';
+    std::cout << "Parser finished in " << format_duration(parser_done - init_done) << '\n';
     std::cout << "Sema finished in " << format_duration(sema_done - sema_start) << '\n';
     std::cout << "Lowering finished in " << format_duration(lowering_done - lowering_start) << '\n';
     std::cout << "Codegen finished in " << format_duration(end - codegen_start) << '\n';
@@ -234,7 +242,7 @@ int main(int argc, char* argv[]) {
     code_stream << file.rdbuf();
     std::string code{code_stream.str()};
 
-    std::cout << "Initializing Julia context...\n";
+    std::cout << "Initializing Julia environment...\n";
     jl_init();
 
     jl_eval_string("using Pkg");

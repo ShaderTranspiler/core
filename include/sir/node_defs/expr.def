@@ -14,6 +14,7 @@ STC_X(ExplicitCast, ExplCast)
 STC_X(IndexerExpr, ArrMem)
 STC_X(Assignment, Assignment)
 STC_X(FunctionCall, FnCall)
+STC_X(ConstructorCall, CtorCall)
 STC_X_LAST(DeclRefExpr, DeclRef)
 
 #include "common/x_macros/end_def.inc"

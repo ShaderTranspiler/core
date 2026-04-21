@@ -270,6 +270,19 @@ void GLSLCodeGenVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     out << ')';
 }
 
+void GLSLCodeGenVisitor::visit_ConstructorCall(ConstructorCall& ctor_call) {
+    out << type_str(ctor_call.type(), ctx, ctx) << '(';
+
+    for (size_t i = 0; i < ctor_call.args.size(); i++) {
+        visit(ctor_call.args[i]);
+
+        if (i != ctor_call.args.size() - 1)
+            out << ", ";
+    }
+
+    out << ')';
+}
+
 void GLSLCodeGenVisitor::visit_DeclRefExpr(DeclRefExpr& decl_ref) {
     NodeBase* decl_node = ctx.get_node(decl_ref.decl);
     assert(decl_node != nullptr && "nullptr pointing DeclRefExpr");

@@ -6,6 +6,8 @@
 #include "frontend/jl/pkg_driver.h"
 #include "frontend/jl/sema.h"
 
+#include "backend/glsl/target_info.h"
+
 // NOLINTBEGIN
 
 namespace stc::jl {
@@ -70,19 +72,21 @@ extern "C" STC_API void stc_jl_parse_expr(jl_value_t* expr) noexcept {
         return;
 
     try {
-        JLParser parser{};
+        JLCtx jl_ctx{};
+        auto& target_info  = glsl::GLSLTargetInfo::get(jl_ctx.type_pool);
+        jl_ctx.target_info = &target_info;
+
+        JLParser parser{jl_ctx};
         NodeId ast = parser.parse(expr);
-        JLCtx jl_ctx{parser.steal_ctx()};
 
         Expr* ast_expr = jl_ctx.get_node(ast);
 
-        // TODO: do anything else other than leaking memory here
+        // TODO: do literally anything else other than just leak the memory here
         CompoundExpr* res_cmpd = nullptr;
-        if (auto* cmpd = dyn_cast<CompoundExpr>(ast_expr)) {
+        if (auto* cmpd = dyn_cast<CompoundExpr>(ast_expr))
             res_cmpd = cmpd;
-        } else {
+        else
             res_cmpd = new CompoundExpr{ast_expr->location, std::vector<NodeId>{}};
-        }
 
         JLSema sema{jl_ctx, *res_cmpd};
         sema.visit(ast);

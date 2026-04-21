@@ -381,6 +381,15 @@ struct IndexerExpr : public Expr {
     SAME_NODE_KIND_DEF(NodeKind::ArrMem)
 };
 
+struct ConstructorCall : public Expr {
+    std::vector<NodeId> args;
+
+    explicit ConstructorCall(SrcLocationId location, TypeId type, std::vector<NodeId> args)
+        : Expr{location, NodeKind::CtorCall, type}, args{std::move(args)} {}
+
+    SAME_NODE_KIND_DEF(NodeKind::CtorCall)
+};
+
 struct FunctionCall : public Expr {
     SymbolId fn_name;
     std::vector<NodeId> args;

@@ -3,6 +3,7 @@
 #include "common/bump_arena.h"
 #include "common/dyn_cast.h"
 #include "common/src_info.h"
+#include "common/target_info.h"
 #include "types/type_pool.h"
 
 namespace stc {
@@ -30,6 +31,7 @@ public:
     using node_kind_type = NodeBaseTy::kind_type;
 
     TranspilerConfig config{};
+    const TargetInfo* target_info; // MIGHT be nullptr (transpilation to SIR should be supported)
 
 protected:
     BumpArena<typename NodeIdTy::id_type> node_arena;
@@ -40,11 +42,12 @@ public:
     SymbolPool sym_pool;
 
     explicit ASTCtx(std::vector<types::BuiltinTD> type_builtins = {},
-                    NodeIdTy::id_type node_arena_kb             = 128U,
-                    SrcLocationId::id_type src_info_arena_kb    = 128U,
-                    types::TypeId::id_type type_arena_kb        = 32U,
-                    SymbolId::id_type sym_arena_kb              = 64U)
-        : node_arena{node_arena_kb * 1024U},
+                    const TargetInfo* target_info = nullptr, NodeIdTy::id_type node_arena_kb = 128U,
+                    SrcLocationId::id_type src_info_arena_kb = 128U,
+                    types::TypeId::id_type type_arena_kb     = 32U,
+                    SymbolId::id_type sym_arena_kb           = 64U)
+        : target_info{target_info},
+          node_arena{node_arena_kb * 1024U},
           type_pool{static_cast<types::TypeId::id_type>(type_arena_kb * 1024U),
                     std::move(type_builtins)},
           src_info_pool{src_info_arena_kb * 1024U},
@@ -72,6 +75,7 @@ protected:
     template <typename T, typename U>
     explicit ASTCtx(ASTCtx<T, U>&& other, NodeIdTy::id_type node_arena_kb)
         : config{std::move(other.config)},
+          target_info{other.target_info},
           node_arena{node_arena_kb * 1024U},
           type_pool{std::move(other.type_pool)},
           src_info_pool{std::move(other.src_info_pool)},

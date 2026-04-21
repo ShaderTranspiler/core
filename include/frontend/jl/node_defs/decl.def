@@ -5,6 +5,7 @@ STC_X(ParamDecl, ParamDecl)
 STC_X(MethodDecl, MethodDecl)
 STC_X(FunctionDecl, FnDecl)
 STC_X(OpaqueFunction, OpaqFn)
+STC_X(BuiltinFunction, BuiltinFn)
 STC_X(StructDecl, StructDecl)
 STC_X_LAST(FieldDecl, FieldDecl)
 

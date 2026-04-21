@@ -229,6 +229,13 @@ SIRNodeId JLLoweringVisitor::visit_OpaqueFunction(OpaqueFunction& opaq_fn) {
                             sir_ctx.get_sym(opaq_fn.fn_name())));
 }
 
+SIRNodeId JLLoweringVisitor::visit_BuiltinFunction(BuiltinFunction& builtin_fn) {
+    return internal_error(
+        std::format("lowering reached a BuiltinFunction leaf node for '{}'. BuiltinFns should only "
+                    "appear as targets to function calls, and should not be separately visited.",
+                    sir_ctx.get_sym(builtin_fn.fn_name())));
+}
+
 SIRNodeId JLLoweringVisitor::visit_StructDecl(StructDecl& struct_) {
     std::vector<SIRNodeId> fields;
     fields.reserve(struct_.field_decls.size());
@@ -314,7 +321,7 @@ SIRNodeId JLLoweringVisitor::visit_ArrayLiteral(ArrayLiteral& arr_lit) {
                                           type_to_string(arr_lit.type, sir_ctx, sir_ctx)));
     }
 
-    auto arr_td       = td.as<ArrayTD>();
+    ArrayTD arr_td    = td.as<ArrayTD>();
     const auto& el_td = sir_ctx.type_pool.get_td(arr_td.element_type_id);
 
     if (el_td.is_array())
@@ -325,25 +332,6 @@ SIRNodeId JLLoweringVisitor::visit_ArrayLiteral(ArrayLiteral& arr_lit) {
 
     if (arr_td.length != lowered_members.size())
         return internal_error("inferred array length mismatch in type of array literal node");
-
-    /*
-    if (td.is_vector()) {
-        if (td.as<VectorTD>().component_count == len)
-            return internal_error(
-                "inferred vector component count mismatch in type of collection literal node");
-    } else if (td.is_matrix()) {
-        auto mat_td       = td.as<MatrixTD>();
-        const auto& el_td = sir_ctx.type_pool.get_td(mat_td.column_type_id);
-        assert(el_td.is_vector()); // this should be guaranteed by the type pool
-
-        size_t cols = mat_td.column_count;
-        size_t rows = el_td.as<VectorTD>().component_count;
-
-        if (cols * rows != len)
-            return internal_error(
-                "inferred matrix dimensions mismatch in type of collection literal node");
-    }
-    */
 
     return emplace_node<sir::ArrayLiteral>(arr_lit.location, arr_lit.type,
                                            std::move(lowered_members));
@@ -499,15 +487,18 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
         return internal_error(
             "non-declaration-reference node in FunctionCall's target_fn not caught by sema");
 
-    // TODO: check for and verify builtins
-
     SymbolId fn_identifier = SymbolId::null_id();
 
-    if (auto* decl = ctx.get_and_dyn_cast<FunctionDecl>(dre->decl))
+    bool is_ctor   = false;
+    auto decl_expr = ctx.get_node(dre->decl);
+    if (auto* decl = dyn_cast<FunctionDecl>(decl_expr))
         fn_identifier = decl->identifier;
-    else if (auto* opaq = ctx.get_and_dyn_cast<OpaqueFunction>(dre->decl))
+    else if (auto* builtin = dyn_cast<BuiltinFunction>(decl_expr))
+        fn_identifier = builtin->fn_name();
+    else if (auto* opaq = dyn_cast<OpaqueFunction>(decl_expr)) {
         fn_identifier = opaq->fn_name();
-    else if (ctx.isa<SymbolLiteral>(dre->decl))
+        is_ctor       = opaq->is_ctor();
+    } else if (ctx.isa<SymbolLiteral>(dre->decl))
         return internal_error("unresolved declaration reference expression found post-sema");
     else
         return internal_error(
@@ -522,6 +513,8 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     };
 
     if (fn_call.args.size() == 2) {
+        assert(!is_ctor);
+
         if (fn_identifier == sym_plus)
             return make_binop(sir::BinaryOp::OpKind::add);
         if (fn_identifier == sym_minus)
@@ -535,6 +528,9 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
 
     for (NodeId arg : fn_call.args)
         args.push_back(visit_and_check(arg));
+
+    if (is_ctor)
+        return emplace_node<sir::ConstructorCall>(fn_call.location, fn_call.type, std::move(args));
 
     return emplace_node<sir::FunctionCall>(fn_call.location, fn_identifier, std::move(args));
 }

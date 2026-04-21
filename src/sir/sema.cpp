@@ -301,6 +301,11 @@ void SIRSemaVisitor::visit_FunctionCall(FunctionCall& fn_call) {
         visit(arg);
 }
 
+void SIRSemaVisitor::visit_ConstructorCall(ConstructorCall& ctor_call) {
+    for (auto arg : ctor_call.args)
+        visit(arg);
+}
+
 void SIRSemaVisitor::visit_DeclRefExpr(DeclRefExpr& decl_ref) {
     if (decl_ref.decl.is_null())
         return error(decl_ref, "incomplete DeclRefExpr node");
