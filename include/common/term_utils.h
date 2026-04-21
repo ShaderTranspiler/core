@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <string_view>
 
 #ifdef _WIN32
     #include <io.h>
@@ -11,15 +12,15 @@
 
 namespace ansi_codes {
 
-inline constexpr std::string black  = "\033[30m";
-inline constexpr std::string red    = "\033[31m";
-inline constexpr std::string green  = "\033[32m";
-inline constexpr std::string yellow = "\033[33m";
-inline constexpr std::string blue   = "\033[34m";
-inline constexpr std::string purple = "\033[35m";
-inline constexpr std::string cyan   = "\033[36m";
-inline constexpr std::string white  = "\033[37m";
-inline constexpr std::string reset  = "\033[0m";
+inline constexpr std::string_view black  = "\033[30m";
+inline constexpr std::string_view red    = "\033[31m";
+inline constexpr std::string_view green  = "\033[32m";
+inline constexpr std::string_view yellow = "\033[33m";
+inline constexpr std::string_view blue   = "\033[34m";
+inline constexpr std::string_view purple = "\033[35m";
+inline constexpr std::string_view cyan   = "\033[36m";
+inline constexpr std::string_view white  = "\033[37m";
+inline constexpr std::string_view reset  = "\033[0m";
 
 }; // namespace ansi_codes
 
@@ -31,10 +32,12 @@ public:
 };
 
 inline std::string colored(std::string text, std::string_view color) {
-    if (!TerminalInfo::supports_color())
-        return text;
+    if (TerminalInfo::supports_color()) {
+        text.insert(0, color);
+        text.append(ansi_codes::reset);
+    }
 
-    return std::string{color} + text + ansi_codes::reset;
+    return text;
 }
 
 } // namespace stc

@@ -1,12 +1,20 @@
 #include <stdexcept>
 
 #include "common/src_info.h"
+#include "common/term_utils.h"
 
 namespace {
-using stc::SrcFile, stc::SrcLocation;
+using stc::SrcFile, stc::SrcLocation, stc::TerminalInfo;
 
-void print_locinfo(const SrcFile& file, SrcLocation location, std::ostream& out) {
+void print_locinfo(const SrcFile& file, SrcLocation location, std::ostream& out,
+                   std::string_view color = ansi_codes::reset) {
+    if (TerminalInfo::supports_color())
+        out << color;
+
     out << '[' << file.path << ':' << location.line << ':' << location.col << "] ";
+
+    if (TerminalInfo::supports_color())
+        out << ansi_codes::reset;
 }
 
 } // namespace
@@ -29,7 +37,7 @@ void report(const SrcInfoPool& pool, SrcLocationId loc_id, std::string_view msg,
 }
 
 void error(const SrcFile& file, SrcLocation location, std::string_view msg, std::ostream& out) {
-    print_locinfo(file, location, out);
+    print_locinfo(file, location, out, ansi_codes::red);
     return error(msg, out);
 }
 
@@ -39,7 +47,7 @@ void error(const SrcInfoPool& pool, SrcLocationId loc_id, std::string_view msg, 
 }
 
 void warning(const SrcFile& file, SrcLocation location, std::string_view msg, std::ostream& out) {
-    print_locinfo(file, location, out);
+    print_locinfo(file, location, out, ansi_codes::yellow);
     return warning(msg, out);
 }
 
@@ -51,7 +59,7 @@ void warning(const SrcInfoPool& pool, SrcLocationId loc_id, std::string_view msg
 
 void internal_error(const SrcFile& file, SrcLocation location, std::string_view msg,
                     std::ostream& out) {
-    print_locinfo(file, location, out);
+    print_locinfo(file, location, out, ansi_codes::red);
     return internal_error(msg, out);
 }
 

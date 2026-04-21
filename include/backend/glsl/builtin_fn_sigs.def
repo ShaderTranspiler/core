@@ -1,0 +1,251 @@
+#include "common/x_macros/begin_def.inc"
+
+// clang-format off
+
+// requires stc::glsl::detail::BuiltinType to be using enum-d in including scope
+
+// format:
+// FunctionName, Signatures...
+//     where Signatures[i] == {ReturnType, ArgumentTypes...}
+
+// builtin function list collected and grouped as seen in specs for 4.60.8
+// https://registry.khronos.org/OpenGL/specs/gl/GLSLangSpec.4.60.pdf
+
+// 8.1: Angle and Trigonometry Functions
+STC_X_FIRST(radians, {GenF, GenF})
+STC_X(degrees, {GenF, GenF})
+STC_X(sin, {GenF, GenF})
+STC_X(cos, {GenF, GenF})
+STC_X(tan, {GenF, GenF})
+STC_X(asin, {GenF, GenF})
+STC_X(acos, {GenF, GenF})
+STC_X(atan, {GenF, GenF, GenF}, {GenF, GenF})
+STC_X(sinh, {GenF, GenF})
+STC_X(cosh, {GenF, GenF})
+STC_X(tanh, {GenF, GenF})
+STC_X(asinh, {GenF, GenF})
+STC_X(acosh, {GenF, GenF})
+STC_X(atanh, {GenF, GenF})
+
+// 8.2: Exponential Functions
+STC_X(pow, {GenF, GenF, GenF})
+STC_X(exp, {GenF, GenF})
+STC_X(log, {GenF, GenF})
+STC_X(exp2, {GenF, GenF})
+STC_X(log2, {GenF, GenF})
+STC_X(sqrt, {GenF, GenF}, {GenD, GenD})
+STC_X(inversesqrt, {GenF, GenF}, {GenD, GenD})
+
+// 8.3: Common Functions
+STC_X(abs, {GenF, GenF}, {GenI, GenI}, {GenD, GenD})
+STC_X(sign, {GenF, GenF}, {GenI, GenI}, {GenD, GenD})
+STC_X(floor, {GenF, GenF}, {GenD, GenD})
+STC_X(trunc, {GenF, GenF}, {GenD, GenD})
+STC_X(round, {GenF, GenF}, {GenD, GenD})
+STC_X(roundEven, {GenF, GenF}, {GenD, GenD})
+STC_X(ceil, {GenF, GenF}, {GenD, GenD})
+STC_X(fract, {GenF, GenF}, {GenD, GenD})
+STC_X(mod,
+    {GenF, GenF, Float}, {GenF, GenF, GenF},
+    {GenD, GenD, Double}, {GenD, GenD, GenD})
+STC_X(modf, {GenF, GenF, OutGenF}, {GenD, GenD, OutGenD})
+STC_X(min,
+    {GenF, GenF, GenF}, {GenF, GenF, Float},
+    {GenD, GenD, GenD}, {GenD, GenD, Double},
+    {GenI, GenI, GenI}, {GenI, GenI, Int},
+    {GenU, GenU, GenU}, {GenU, GenU, UInt})
+STC_X(max,
+    {GenF, GenF, GenF}, {GenF, GenF, Float},
+    {GenD, GenD, GenD}, {GenD, GenD, Double},
+    {GenI, GenI, GenI}, {GenI, GenI, Int},
+    {GenU, GenU, GenU}, {GenU, GenU, UInt})
+STC_X(clamp,
+    {GenF, GenF, GenF, GenF}, {GenF, GenF, Float, Float},
+    {GenD, GenD, GenD, GenD}, {GenD, GenD, Double, Double},
+    {GenI, GenI, GenI, GenI}, {GenI, GenI, Int, Int},
+    {GenU, GenU, GenU, GenU}, {GenU, GenU, UInt, UInt})
+STC_X(mix,
+    {GenF, GenF, GenF, GenF}, {GenF, GenF, GenF, Float},
+    {GenD, GenD, GenD, GenD}, {GenD, GenD, GenD, Double},
+    
+    {GenF, GenF, GenF, GenB}, {GenD, GenD, GenD, GenB},
+    {GenI, GenI, GenI, GenB}, {GenU, GenU, GenU, GenB},
+    {GenB, GenB, GenB, GenB})
+STC_X(step,
+    {GenF, GenF, GenF}, {GenF, Float, GenF},
+    {GenD, GenD, GenD}, {GenD, Double, GenD})
+STC_X(smoothstep,
+    {GenF, GenF, GenF, GenF}, {GenF, Float, Float, GenF},
+    {GenD, GenD, GenD, GenD}, {GenD, Double, Double, GenD})
+STC_X(isnan, {GenB, GenF}, {GenB, GenD})
+STC_X(isinf, {GenB, GenF}, {GenB, GenD})
+STC_X(floatBitsToInt, {GenI, GenF})
+STC_X(floatBitsToUint, {GenU, GenF})
+STC_X(intBitsToFloat, {GenF, GenI})
+STC_X(uintBitsToFloat, {GenF, GenU})
+STC_X(fma, {GenF, GenF, GenF, GenF}, {GenD, GenD, GenD, GenD})
+STC_X(frexp, {GenF, GenF, OutGenI}, {GenD, GenD, OutGenI})
+STC_X(ldexp, {GenF, GenF, GenI}, {GenD, GenD, GenI})
+
+// 8.4: Floating-Point Pack and Unpack Functions
+STC_X(packUnorm2x16, {UInt, Vec2F})
+STC_X(packSnorm2x16, {UInt, Vec2F})
+STC_X(packUnorm4x8, {UInt, Vec4F})
+STC_X(packSnorm4x8, {UInt, Vec4F})
+STC_X(unpackUnorm2x16, {Vec2F, UInt})
+STC_X(unpackSnorm2x16, {Vec2F, UInt})
+STC_X(unpackUnorm4x8, {Vec4F, UInt})
+STC_X(unpackSnorm4x8, {Vec4F, UInt})
+STC_X(packHalf2x16, {UInt, Vec2F})
+STC_X(unpackHalf2x16, {Vec2F, UInt})
+STC_X(packDouble2x32, {Double, Vec2U})
+STC_X(unpackDouble2x32, {Vec2U, Double})
+
+// 8.5: Geometric Functions
+STC_X(length, {Float, GenF}, {Double, GenD})
+STC_X(distance, {Float, GenF, GenF}, {Double, GenD, GenD})
+STC_X(dot, {Float, GenF, GenF}, {Double, GenD, GenD})
+STC_X(cross, {Vec3F, Vec3F, Vec3F}, {Vec3D, Vec3D, Vec3D})
+STC_X(normalize, {GenF, GenF}, {GenD, GenD})
+STC_X(ftransform, {Vec4F})
+STC_X(faceforward, {GenF, GenF, GenF, GenF}, {GenD, GenD, GenD, GenD})
+STC_X(reflect, {GenF, GenF, GenF}, {GenD, GenD, GenD})
+STC_X(refract, {GenF, GenF, GenF, Float}, {GenD, GenD, GenD, Double})
+
+// 8.6: Matrix Functions
+
+// this is the only function signature that uses the generic mat and dmat types in the spec
+// so, it would have been overkill to introduce these generic mat types instead of just unrolling by hand
+#define STC_MAT_TRIPLETS(T) \
+    {Mat2x2##T, Mat2x2##T, Mat2x2##T}, {Mat2x3##T, Mat2x3##T, Mat2x3##T}, {Mat2x4##T, Mat2x4##T, Mat2x4##T}, \
+    {Mat3x2##T, Mat3x2##T, Mat3x2##T}, {Mat3x3##T, Mat3x3##T, Mat3x3##T}, {Mat3x4##T, Mat3x4##T, Mat3x4##T}, \
+    {Mat4x2##T, Mat4x2##T, Mat4x2##T}, {Mat4x3##T, Mat4x3##T, Mat4x3##T}, {Mat4x4##T, Mat4x4##T, Mat4x4##T}
+
+STC_X(matrixCompMult, STC_MAT_TRIPLETS(F), STC_MAT_TRIPLETS(D))
+
+#undef STC_MAT_TRIPLETS
+
+STC_X(outerProduct,
+    {Mat2x2F, Vec2F, Vec2F}, {Mat3x3F, Vec3F, Vec3F}, {Mat4x4F, Vec4F, Vec4F},
+    {Mat2x3F, Vec3F, Vec2F}, {Mat3x2F, Vec2F, Vec3F},
+    {Mat2x4F, Vec4F, Vec2F}, {Mat4x2F, Vec2F, Vec4F},
+    {Mat3x4F, Vec4F, Vec3F}, {Mat4x3F, Vec3F, Vec4F},
+
+    {Mat2x2D, Vec2D, Vec2D}, {Mat3x3D, Vec3D, Vec3D}, {Mat4x4D, Vec4D, Vec4D},
+    {Mat2x3D, Vec3D, Vec2D}, {Mat3x2D, Vec2D, Vec3D},
+    {Mat2x4D, Vec4D, Vec2D}, {Mat4x2D, Vec2D, Vec4D},
+    {Mat3x4D, Vec4D, Vec3D}, {Mat4x3D, Vec3D, Vec4D})
+STC_X(transpose,
+    {Mat2x2F, Mat2x2F}, {Mat3x3F, Mat3x3F}, {Mat4x4F, Mat4x4F},
+    {Mat2x3F, Mat3x2F}, {Mat3x2F, Mat2x3F},
+    {Mat2x4F, Mat4x2F}, {Mat4x2F, Mat2x4F},
+    {Mat3x4F, Mat4x3F}, {Mat4x3F, Mat3x4F},
+
+    {Mat2x2D, Mat2x2D}, {Mat3x3D, Mat3x3D}, {Mat4x4D, Mat4x4D},
+    {Mat2x3D, Mat3x2D}, {Mat3x2D, Mat2x3D},
+    {Mat2x4D, Mat4x2D}, {Mat4x2D, Mat2x4D},
+    {Mat3x4D, Mat4x3D}, {Mat4x3D, Mat3x4D})
+STC_X(determinant,
+    {Float, Mat2x2F}, {Float, Mat3x3F}, {Float, Mat4x4F},
+    {Double, Mat2x2D}, {Double, Mat3x3D}, {Double, Mat4x4D})
+STC_X(inverse,
+    {Mat2x2F, Mat2x2F}, {Mat3x3F, Mat3x3F}, {Mat4x4F, Mat4x4F},
+    {Mat2x2D, Mat2x2D}, {Mat3x3D, Mat3x3D}, {Mat4x4D, Mat4x4D})
+
+// 8.7: Vector Relational Functions
+#define STC_VEC_REL_SIG_BASE {VecB, VecF, VecF}, {VecB, VecD, VecD}, {VecB, VecI, VecI}, {VecB, VecU, VecU}
+STC_X(lessThan, STC_VEC_REL_SIG_BASE)
+STC_X(lessThanEqual, STC_VEC_REL_SIG_BASE)
+STC_X(greaterThan, STC_VEC_REL_SIG_BASE)
+STC_X(greaterThanEqual, STC_VEC_REL_SIG_BASE)
+STC_X(equal, STC_VEC_REL_SIG_BASE, {VecB, VecB, VecB})
+STC_X(notEqual, STC_VEC_REL_SIG_BASE, {VecB, VecB, VecB})
+STC_X(any, {Bool, VecB})
+STC_X(all, {Bool, VecB})
+STC_X(not, {VecB, VecB})
+#undef STC_VEC_REL_SIG_BASE
+
+// 8.8: Integer Functions
+STC_X(uaddCarry, {GenU, GenU, GenU, OutGenU})
+STC_X(usubBorrow, {GenU, GenU, GenU, OutGenU})
+STC_X(umulExtended, {Void, GenU, GenU, OutGenU, OutGenU})
+STC_X(imulExtended, {Void, GenI, GenI, OutGenI, OutGenI})
+STC_X(bitfieldExtract, {GenI, GenI, Int, Int}, {GenU, GenU, Int, Int})
+STC_X(bitfieldInsert, {GenI, GenI, GenI, Int, Int}, {GenU, GenU, GenU, Int, Int})
+STC_X(bitfieldReverse, {GenI, GenI}, {GenU, GenU})
+STC_X(bitCount, {GenI, GenI}, {GenI, GenU})
+STC_X(findLSB, {GenI, GenI}, {GenI, GenU})
+STC_X(findMSB, {GenI, GenI}, {GenI, GenU})
+
+// 8.9: Texture Functions
+// these require opaque types
+
+// 8.10: Atomic Counter Functions
+// these require atomic_ types
+
+// 8.11: Atomic Memory Functions
+STC_X(atomicAdd,      {UInt, InOutUInt, UInt},       {Int, InOutInt, Int})
+STC_X(atomicMin,      {UInt, InOutUInt, UInt},       {Int, InOutInt, Int})
+STC_X(atomicMax,      {UInt, InOutUInt, UInt},       {Int, InOutInt, Int})
+STC_X(atomicAnd,      {UInt, InOutUInt, UInt},       {Int, InOutInt, Int})
+STC_X(atomicOr,       {UInt, InOutUInt, UInt},       {Int, InOutInt, Int})
+STC_X(atomicXor,      {UInt, InOutUInt, UInt},       {Int, InOutInt, Int})
+STC_X(atomicExchange, {UInt, InOutUInt, UInt},       {Int, InOutInt, Int})
+STC_X(atomicCompSwap, {UInt, InOutUInt, UInt, UInt}, {Int, InOutInt, Int, Int})
+
+// 8.12: Image Functions
+// these require opaque types
+
+// 8.13: Geometry Shader Functions
+STC_X(EmitStreamVertex, {Void, Int})
+STC_X(EndStreamPrimitive, {Void, Int})
+STC_X(EmitVertex, {Void})
+STC_X(EndPrimitive, {Void})
+
+// 8.14: Fragment Processing Functions
+
+// 8.14.1: Derivative Functions
+STC_X(dFdx, {GenF, GenF})
+STC_X(dFdy, {GenF, GenF})
+STC_X(dFdxFine, {GenF, GenF})
+STC_X(dFdyFine, {GenF, GenF})
+STC_X(dFdxCoarse, {GenF, GenF})
+STC_X(dFdyCoarse, {GenF, GenF})
+STC_X(fwidth, {GenF, GenF})
+STC_X(fwidthFine, {GenF, GenF})
+STC_X(fwidthCoarse, {GenF, GenF})
+
+// 8.14.2: Interpolation Functions
+// here, first args also have to be l-values, but there's no way to store that right now
+STC_X(interpolateAtCentroid, {GenF, GenF})
+STC_X(interpolateAtSample, {GenF, GenF, Int})
+STC_X(interpolateAtOffset, {GenF, GenF, Vec2F})
+
+// 8.15: Noise Functions
+STC_X(noise1, {Float, GenF})
+STC_X(noise2, {Vec2F, GenF})
+STC_X(noise3, {Vec3F, GenF})
+STC_X(noise4, {Vec4F, GenF})
+
+// 8.16: Shader Invocation Control Function(s)
+STC_X(barrier, {Void})
+
+// 8.16: Shader Memory Control Functions
+STC_X(memoryBarrier, {Void})
+STC_X(memoryBarrierAtomicCounter, {Void})
+STC_X(memoryBarrierBuffer, {Void})
+STC_X(memoryBarrierShared, {Void})
+STC_X(memoryBarrierImage, {Void})
+STC_X(groupMemoryBarrier, {Void})
+
+// 8.18: Subpass-Input Functions
+// these are Vulkan-only functions
+
+// 8.19: Shader Invocation Group Functions
+STC_X(anyInvocation, {Bool, Bool})
+STC_X(allInvocations, {Bool, Bool})
+STC_X_LAST(allInvocationsEqual, {Bool, Bool})
+
+// clang-format on
+
+#include "common/x_macros/end_def.inc"
