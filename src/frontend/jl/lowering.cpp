@@ -289,13 +289,15 @@ SIRNodeId JLLoweringVisitor::visit_UInt128Literal([[maybe_unused]] UInt128Litera
 }
 
 SIRNodeId JLLoweringVisitor::visit_Float32Literal(Float32Literal& lit) {
-    return emplace_node<sir::FloatLiteral>(lit.location, sir_ctx.type_pool.float_td(32),
-                                           std::to_string(lit.value));
+    return emplace_node<sir::FloatLiteral>(
+        lit.location, sir_ctx.type_pool.float_td(32),
+        std::format("{:.{}f}", lit.value, std::numeric_limits<float>::max_digits10));
 }
 
 SIRNodeId JLLoweringVisitor::visit_Float64Literal(Float64Literal& lit) {
-    return emplace_node<sir::FloatLiteral>(lit.location, sir_ctx.type_pool.float_td(64),
-                                           std::to_string(lit.value));
+    return emplace_node<sir::FloatLiteral>(
+        lit.location, sir_ctx.type_pool.float_td(64),
+        std::format("{:.{}f}", lit.value, std::numeric_limits<double>::max_digits10));
 }
 
 SIRNodeId JLLoweringVisitor::visit_ArrayLiteral(ArrayLiteral& arr_lit) {
@@ -439,6 +441,15 @@ SIRNodeId JLLoweringVisitor::visit_OpaqueNode([[maybe_unused]] OpaqueNode& opaq)
 
 SIRNodeId JLLoweringVisitor::visit_GlobalRef([[maybe_unused]] GlobalRef& gref) {
     throw std::logic_error{"using unimplemented feature: global refs"};
+}
+
+SIRNodeId JLLoweringVisitor::visit_ImplicitCast(ImplicitCast& impl_cast) {
+    return visit_and_check(impl_cast.target);
+}
+
+SIRNodeId JLLoweringVisitor::visit_ExplicitCast(ExplicitCast& expl_cast) {
+    SIRNodeId inner = visit_and_check(expl_cast.target);
+    return emplace_node<sir::ExplicitCast>(expl_cast.location, expl_cast.type, inner);
 }
 
 SIRNodeId JLLoweringVisitor::visit_DeclRefExpr(DeclRefExpr& dre) {

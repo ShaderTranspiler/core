@@ -277,6 +277,16 @@ void JLDumper::visit_GlobalRef(GlobalRef& ref) {
         << std::to_string(ref.module.value);
 }
 
+void JLDumper::visit_ImplicitCast(ImplicitCast& impl_cast) {
+    out << indent() << "ImplicitCast: (" << type_str(impl_cast.type) << ")\n";
+    visit(impl_cast.target);
+}
+
+void JLDumper::visit_ExplicitCast(ExplicitCast& expl_cast) {
+    out << indent() << "ExplicitCast: (" << type_str(expl_cast.type) << ")\n";
+    visit(expl_cast.target);
+}
+
 void JLDumper::visit_DeclRefExpr(DeclRefExpr& dre) {
     out << indent() << "DeclRefExpr: ";
 

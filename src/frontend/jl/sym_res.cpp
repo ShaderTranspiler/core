@@ -252,6 +252,14 @@ EMPTY_VISITOR_DEF(NothingLiteral)
 EMPTY_VISITOR_DEF(OpaqueNode)
 EMPTY_VISITOR_DEF(GlobalRef)
 
+void SymbolRes::visit_ImplicitCast(ImplicitCast& impl_cast) {
+    visit(impl_cast.target);
+}
+
+void SymbolRes::visit_ExplicitCast(ExplicitCast& expl_cast) {
+    visit(expl_cast.target);
+}
+
 void SymbolRes::visit_DeclRefExpr(DeclRefExpr& dre) {
     visit(dre.decl);
 }

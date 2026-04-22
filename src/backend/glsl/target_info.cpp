@@ -171,8 +171,71 @@ bool GLSLTargetInfo::valid_ctor_call(TypeId target, const TypeList& arg_types) c
     return actual_comps >= req_comps;
 }
 
-bool GLSLTargetInfo::can_implicit_cast([[maybe_unused]] TypeId src_ty,
-                                       [[maybe_unused]] TypeId dest_ty) const {
+// implemented according to the table in the 4.1.10 (implicit conversions) section of the specs
+bool GLSLTargetInfo::can_implicit_cast(TypeId src_ty, TypeId dest_ty) const {
+    const auto& glt = gl_types;
+
+    const auto can_cast_scalar = [&glt](TypeId src, TypeId dest) {
+        assert(glt.is_gl_scalar_type(dest));
+
+        if (dest == glt.gl_uint)
+            return src == glt.gl_int;
+
+        if (dest == glt.gl_float)
+            return src == glt.gl_int || src == glt.gl_uint;
+
+        if (dest == glt.gl_double)
+            return src == glt.gl_int || src == glt.gl_uint || src == glt.gl_float;
+
+        return false;
+    };
+
+    if (!glt.is_gl_type(src_ty) || !glt.is_gl_type(dest_ty))
+        return false;
+
+    if (src_ty == dest_ty)
+        return true;
+
+    // int -> uint
+    // int, uint -> float
+    // int, uint, float -> double
+    if (glt.is_gl_scalar_type(dest_ty))
+        return can_cast_scalar(src_ty, dest_ty);
+
+    const auto& src_td  = glt.type_pool.get_td(src_ty);
+    const auto& dest_td = glt.type_pool.get_td(dest_ty);
+
+    // ivecn -> uvecn
+    // ivecn, uvecn -> vecn
+    // ivecn, uvecn, vecn -> dvecn
+    if (src_td.is_vector() && dest_td.is_vector()) {
+        VectorTD src_vec  = src_td.as<VectorTD>();
+        VectorTD dest_vec = dest_td.as<VectorTD>();
+
+        if (src_vec.component_count != dest_vec.component_count)
+            return false;
+
+        return can_cast_scalar(src_vec.component_type_id, dest_vec.component_type_id);
+    }
+
+    // matnxm -> dmatnxm
+    if (src_td.is_matrix() && dest_td.is_matrix()) {
+        MatrixTD src_mat  = src_td.as<MatrixTD>();
+        MatrixTD dest_mat = dest_td.as<MatrixTD>();
+
+        if (src_mat.column_count != dest_mat.column_count)
+            return false;
+
+        VectorTD src_col  = glt.type_pool.get_td(src_mat.column_type_id).as<VectorTD>();
+        VectorTD dest_col = glt.type_pool.get_td(dest_mat.column_type_id).as<VectorTD>();
+
+        if (src_col.component_count != dest_col.component_count)
+            return false;
+
+        return src_col.component_type_id == glt.gl_float &&
+               dest_col.component_type_id == glt.gl_double;
+    }
+
     return false;
 }
 

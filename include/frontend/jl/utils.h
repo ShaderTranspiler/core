@@ -2,10 +2,13 @@
 
 #include "base.h"
 #include "julia_guard.h"
+#include "types/type_pool.h"
 
 #include <utility>
 
 namespace stc::jl {
+
+using namespace stc::types;
 
 template <typename T>
 struct jl_cast_trait;
@@ -116,6 +119,51 @@ inline bool is_spec_of(jl_datatype_t* dt, jl_unionall_t* ua) {
     jl_datatype_t* unwrapped_ua_dt = safe_cast<jl_datatype_t>(unwrapped_ua);
 
     return dt->name == unwrapped_ua_dt->name;
+}
+
+[[nodiscard]]
+inline bool is_jl_convertible(TypeId from, TypeId to, const TypePool& type_pool) {
+    if (from == to)
+        return true;
+
+    const auto& from_td = type_pool.get_td(from);
+    const auto& to_td   = type_pool.get_td(to);
+
+    if (!from_td.is_scalar() || !to_td.is_scalar())
+        return false;
+
+    // since it's not possible to catch inexact errors, like julia does, only widening conversions
+    // are allowed
+
+    if (to_td.is<IntTD>()) {
+        if (from_td.is<IntTD>()) {
+            IntTD to_int   = to_td.as<IntTD>();
+            IntTD from_int = from_td.as<IntTD>();
+
+            return to_int.width >= from_int.width;
+        }
+
+        if (from_td.is<BoolTD>())
+            return true;
+
+        return false;
+    }
+
+    if (to_td.is<FloatTD>()) {
+        if (from_td.is<IntTD>() || from_td.is<BoolTD>())
+            return true;
+
+        if (from_td.is<FloatTD>()) {
+            FloatTD to_float   = to_td.as<FloatTD>();
+            FloatTD from_float = from_td.as<FloatTD>();
+
+            return to_float.enc == from_float.enc;
+        }
+
+        return false;
+    }
+
+    return false;
 }
 
 } // namespace stc::jl

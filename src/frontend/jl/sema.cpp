@@ -80,7 +80,7 @@ TypeId JLSema::fail(std::string_view msg, const Expr& expr) {
     return TypeId::null_id();
 }
 
-TypeId JLSema::warn(std::string_view msg, const Expr& expr) {
+TypeId JLSema::warn(std::string_view msg, const Expr& expr) const {
     std::cerr << '\n';
 
     auto [loc, file] = ctx.src_info_pool.get_loc_and_file(expr.location);
@@ -248,53 +248,79 @@ void JLSema::pop_scope(bool is_global, bool skip_mangle) {
     scopes.pop_back();
 }
 
-bool JLSema::check_type_against(TypeId actual_type, TypeId checked_type) const {
+JLSema::TypeCheckResult JLSema::check_type_against(TypeId actual_type, TypeId checked_type,
+                                                   const Expr& base_expr) const {
     if (actual_type.is_null()) {
         // TODO: custom error
-        return false;
+        return TypeCheckResult::Failure;
     }
 
     if (actual_type == checked_type)
-        return true;
+        return TypeCheckResult::Ok;
+
+    if (is_jl_convertible(actual_type, checked_type, tpool)) {
+        if (ctx.target_info == nullptr) {
+            warn(std::format("conversion from {} to {} has been allowed based on Julia semantics, "
+                             "since target info is unavailable",
+                             type_str(actual_type), type_str(checked_type)),
+                 base_expr);
+
+            return TypeCheckResult::Ok;
+        }
+
+        if (ctx.target_info->can_implicit_cast(actual_type, expected_type))
+            return TypeCheckResult::ImplicitCast;
+
+        if (ctx.target_info->valid_ctor_call(actual_type, std::vector{expected_type}))
+            return TypeCheckResult::ExplicitCast;
+
+        return TypeCheckResult::Failure;
+    }
 
     const auto& expected_td = tpool.get_td(checked_type);
-    auto actual_td = LazyInit{[&]() -> const TypeDescriptor& { return tpool.get_td(actual_type); }};
-
-    // TODO: subsumption, promotion
+    LazyInit actual_td{[&]() -> const TypeDescriptor& { return tpool.get_td(actual_type); }};
 
     // if expected fn type has an identifier, actual has to match it
     // if it doesnt, only the function-ness of the actual type is checked
     if (expected_td.is_function() && actual_td.get().is_function()) {
         auto expected_fn = expected_td.as<FunctionTD>();
 
-        return expected_fn.identifier.is_null() ||
-               expected_fn.identifier == actual_td.get().as<FunctionTD>().identifier;
+        if (expected_fn.identifier.is_null() ||
+            expected_fn.identifier == actual_td.get().as<FunctionTD>().identifier)
+            return TypeCheckResult::Ok;
+
+        return TypeCheckResult::Failure;
     }
 
     if (expected_td.is_array() && actual_td.get().is_array()) {
         ArrayTD expected_arr_ty = expected_td.as<ArrayTD>();
         ArrayTD actual_arr_ty   = actual_td.get().as<ArrayTD>();
 
-        if (!check_type_against(actual_arr_ty.element_type_id, expected_arr_ty.element_type_id))
-            return false;
+        if (check_type_against(actual_arr_ty.element_type_id, expected_arr_ty.element_type_id,
+                               base_expr) != TypeCheckResult::Ok)
+            return TypeCheckResult::Failure;
 
         if (tpool.is_array_any_size(checked_type))
-            return true;
+            return TypeCheckResult::Ok;
 
-        return actual_arr_ty.length == expected_arr_ty.length;
+        return actual_arr_ty.length == expected_arr_ty.length ? TypeCheckResult::Ok
+                                                              : TypeCheckResult::Failure;
     }
 
     if (expected_td.is_vector() && actual_td.get().is_vector()) {
         VectorTD expected_vec_ty = expected_td.as<VectorTD>();
         VectorTD actual_vec_ty   = actual_td.get().as<VectorTD>();
 
-        if (!check_type_against(actual_vec_ty.component_type_id, expected_vec_ty.component_type_id))
-            return false;
+        if (check_type_against(actual_vec_ty.component_type_id, expected_vec_ty.component_type_id,
+                               base_expr) != TypeCheckResult::Ok)
+            return TypeCheckResult::Failure;
 
         if (tpool.is_vec_any_size(checked_type))
-            return true;
+            return TypeCheckResult::Ok;
 
-        return actual_vec_ty.component_count == expected_vec_ty.component_count;
+        return actual_vec_ty.component_count == expected_vec_ty.component_count
+                   ? TypeCheckResult::Ok
+                   : TypeCheckResult::Failure;
     }
 
     if (expected_td.is_matrix() && actual_td.get().is_matrix()) {
@@ -307,20 +333,34 @@ bool JLSema::check_type_against(TypeId actual_type, TypeId checked_type) const {
         VectorTD actual_col_ty   = tpool.get_td(actual_mat_ty.column_type_id).as<VectorTD>();
         VectorTD expected_col_ty = tpool.get_td(expected_mat_ty.column_type_id).as<VectorTD>();
 
-        if (!check_type_against(actual_col_ty.component_type_id, expected_col_ty.component_type_id))
-            return false;
+        if (check_type_against(actual_col_ty.component_type_id, expected_col_ty.component_type_id,
+                               base_expr) != TypeCheckResult::Ok)
+            return TypeCheckResult::Failure;
 
         if (tpool.is_mat_any_size(checked_type))
-            return true;
+            return TypeCheckResult::Ok;
 
-        return actual_mat_ty.column_count == expected_mat_ty.column_count &&
-               actual_col_ty.component_count == expected_col_ty.component_count;
+        if (actual_mat_ty.column_count == expected_mat_ty.column_count &&
+            actual_col_ty.component_count == expected_col_ty.component_count)
+            return TypeCheckResult::Ok;
+
+        return TypeCheckResult::Failure;
     }
 
-    return false;
+    return TypeCheckResult::Failure;
 }
 
-bool JLSema::check(Expr& expr, TypeId checked_type, bool allow_pretyped) {
+JLSema::TypeCheckResult JLSema::check(Expr& expr, TypeId checked_type, bool allow_pretyped,
+                                      bool handles_casts) {
+    if (!handles_casts) {
+        internal_error("base type check function called without caller setting handles_casts. this "
+                       "is an indicator that implicit/explicit casting semantics were not taken "
+                       "into consideration at the call site.",
+                       expr);
+
+        return TypeCheckResult::Failure;
+    }
+
     bool old_pretyped_value = allow_pretyped_nodes;
     if (allow_pretyped)
         allow_pretyped_nodes = true;
@@ -331,7 +371,7 @@ bool JLSema::check(Expr& expr, TypeId checked_type, bool allow_pretyped) {
                        "already been determined, while the allow_pretyped argument is false",
                        expr);
 
-        return false;
+        return TypeCheckResult::Failure;
     }
     auto prev_expected  = this->expected_type;
     this->expected_type = checked_type;
@@ -341,14 +381,14 @@ bool JLSema::check(Expr& expr, TypeId checked_type, bool allow_pretyped) {
         allow_pretyped_nodes = old_pretyped_value;
     }};
 
-    // delegate type checking for returns to their visitor-only
+    // delegate type checking for returns to their visitor only
     // this is because they're checked against the current fn return type instead of an expected
     // type, given that they always should resolve to the void type (or null on failure)
     if (isa<ReturnStmt>(expr)) {
         expr.type = impl_this()->visit(&expr);
         assert(expr.type.is_null() || expr.type == tpool.void_td());
 
-        return !expr.type.is_null();
+        return !expr.type.is_null() ? TypeCheckResult::Ok : TypeCheckResult::Failure;
     }
 
     TypeId actual_type = expr.type.is_null() ? impl_this()->visit(&expr) : expr.type;
@@ -357,22 +397,59 @@ bool JLSema::check(Expr& expr, TypeId checked_type, bool allow_pretyped) {
         tpool.get_td(actual_type).is_builtin(BuiltinTypeKind::String))
         fail("nodes representing strings are not allowed", expr);
 
-    if (!check_type_against(actual_type, checked_type)) {
+    TypeCheckResult result = check_type_against(actual_type, checked_type, expr);
+    if (result == TypeCheckResult::Failure) {
         // if actual_type is null, that's mostly an already reported error
         if (_success || !actual_type.is_null())
-            fail(std::format("type mismatch during type checking: expected {}, got {}",
-                             type_str(checked_type), type_str(actual_type)),
+            fail(std::format("type mismatch during type checking: cannot convert {} to the "
+                             "expected {} type",
+                             type_str(actual_type), type_str(checked_type)),
                  expr);
 
+        return TypeCheckResult::Failure;
+    }
+
+    expr.type = actual_type;
+
+    return result;
+}
+
+bool JLSema::check(NodeId& node_id, TypeId expected, bool allow_pretyped) {
+    if (node_id.is_null()) {
+        _success = false;
+        stc::internal_error("trying to type check node with null id");
         return false;
     }
 
-    // TODO
-    // maybe it would be wiser to use expected_type here, and do manual case-by-case rewriting (e.g.
-    // for any-sized-array or any func)
-    expr.type = actual_type;
+    Expr* expr = ctx.get_node(node_id);
 
-    return true;
+    if (expr == nullptr) {
+        _success = false;
+        stc::internal_error("arena returned nullptr for node id during type checking");
+        return false;
+    }
+
+    TypeCheckResult result = check(*expr, expected, allow_pretyped, true);
+
+    // NOTE: cast AST nodes already set their type in their ctor, there's no need to visit them
+    switch (result.value) {
+        case TypeCheckResult::Ok:
+            return true;
+
+        case TypeCheckResult::Failure:
+            return false;
+
+        case TypeCheckResult::ImplicitCast:
+            wrap_in_cast(node_id, expected, false, *expr);
+            return true;
+
+        case TypeCheckResult::ExplicitCast:
+            wrap_in_cast(node_id, expected, true, *expr);
+            return true;
+
+        default:
+            throw std::logic_error{"unaccounted TypeCheckResult in check"};
+    }
 }
 
 TypeId JLSema::infer(Expr& expr, bool allow_pretyped) {
@@ -1208,7 +1285,7 @@ TypeId JLSema::visit_ArrayLiteral(ArrayLiteral& arr_lit) {
     }
 
     if (!checked_el_type.is_null()) {
-        for (NodeId member : arr_lit.members)
+        for (NodeId& member : arr_lit.members)
             check(member, checked_el_type);
 
         return tpool.array_td(checked_el_type, len);
@@ -1246,12 +1323,20 @@ TypeId JLSema::visit_IndexerExpr(IndexerExpr& idx_expr) {
         return fail("failed to infer type for target of an indexer expression", idx_expr);
 
     if (is_checking()) {
-        bool any_coll_match = check_type_against(coll_type, tpool.any_vec_td(expected_type)) ||
-                              (tpool.get_td(expected_type).is_scalar() &&
-                               (check_type_against(coll_type, tpool.any_mat_td(expected_type)) ||
-                                check_type_against(coll_type, tpool.any_array_td(expected_type))));
+        TypeCheckResult res = TypeCheckResult::Failure;
 
-        if (!any_coll_match) {
+        if (tpool.get_td(expected_type).is_scalar()) {
+            res = check_type_against(coll_type, tpool.any_vec_td(expected_type), idx_expr);
+
+            if (!res)
+                res = check_type_against(coll_type, tpool.any_mat_td(expected_type), idx_expr);
+
+            if (!res)
+                res = check_type_against(coll_type, tpool.any_array_td(expected_type), idx_expr);
+        }
+
+        // this explicitly disallows casting on the target's type
+        if (res != TypeCheckResult::Ok) {
             return fail(std::format("target of an indexer expression could not be checked to hold "
                                     "a collection of the expected '{}' type",
                                     type_str(expected_type)),
@@ -1382,6 +1467,20 @@ TypeId JLSema::visit_OpaqueNode(OpaqueNode& opaq) {
 
 TypeId JLSema::visit_GlobalRef(GlobalRef& gref) {
     return fail("global ref found in source AST.", gref);
+}
+
+TypeId JLSema::visit_ImplicitCast(ImplicitCast& impl_cast) {
+    if (impl_cast.type.is_null())
+        return internal_error("implicit cast node with null type", impl_cast);
+
+    return impl_cast.type;
+}
+
+TypeId JLSema::visit_ExplicitCast(ExplicitCast& expl_cast) {
+    if (expl_cast.type.is_null())
+        return internal_error("explicit cast node with null type", expl_cast);
+
+    return expl_cast.type;
 }
 
 TypeId JLSema::visit_DeclRefExpr(DeclRefExpr& dre) {
@@ -1593,7 +1692,7 @@ TypeId JLSema::ret_type_of_jl_call(jl_function_t* fn, const std::vector<TypeId>&
     assert(fn != nullptr);
 
     // only actually alloc and init string if needed for an error msg
-    auto error_suffix = LazyInit{[&]() -> std::string {
+    LazyInit error_suffix{[&]() -> std::string {
         return std::format("(in call to function '{}')", get_jl_fn_name(fn));
     }};
 
@@ -1725,14 +1824,14 @@ std::optional<MethodDecl*> JLSema::find_sig_match(const FunctionDecl& fn_decl,
 
             if (arg_it == arg_types.end()) {
                 // assumes that if the current param is default initializable, all the rest are too
-                // if not, that should've be caught as an error by the method decl visitor
+                // if not, that should've been caught as an error by the method decl visitor
                 if (pdecl->default_initializer.is_null())
                     sig_match = false;
 
                 break;
             }
 
-            if (!check_type_against(*arg_it, pdecl->type)) {
+            if (check_type_against(*arg_it, pdecl->type, base_expr) != TypeCheckResult::Ok) {
                 sig_match = false;
                 break;
             }

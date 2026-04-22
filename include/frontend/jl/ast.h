@@ -438,6 +438,30 @@ struct GlobalRef : public Expr {
     SAME_NODE_KIND_DEF(NodeKind::GlobalRef)
 };
 
+struct ImplicitCast : public Expr {
+    NodeId target;
+
+    explicit ImplicitCast(SrcLocationId location, NodeId target, TypeId type)
+        : Expr{location, NodeKind::ImplCast, type}, target{target} {
+        ASSERT_NOT_NULL(target);
+        ASSERT_NOT_NULL(type);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::ImplCast)
+};
+
+struct ExplicitCast : public Expr {
+    NodeId target;
+
+    explicit ExplicitCast(SrcLocationId location, NodeId target, TypeId type)
+        : Expr{location, NodeKind::ExplCast, type}, target{target} {
+        ASSERT_NOT_NULL(target);
+        ASSERT_NOT_NULL(type);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::ExplCast)
+};
+
 // DeclRefExpr-s have 2 states:
 // unresolved (after parser): decl points to a SymbolLiteral
 // resolved (after sema): decl points to a Decl or an OpaqueFunction

@@ -80,7 +80,8 @@ public:
     TypeId builtin_global_ty(std::string_view global_name) const;
 
     virtual bool valid_ctor_call(TypeId target, const TypeList& arg_types) const = 0;
-    virtual bool can_implicit_cast(TypeId src_ty, TypeId dest_ty) const          = 0;
+
+    virtual bool can_implicit_cast(TypeId src_ty, TypeId dest_ty) const = 0;
 
 private:
     const BuiltinFunction* get_builtin_fn(std::string_view fn_name) const;

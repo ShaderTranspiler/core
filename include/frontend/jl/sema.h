@@ -49,25 +49,28 @@ public:
     // deferred method body visitor
     void visit_method_body(MethodDecl& method);
 
-    bool check_type_against(TypeId actual_type, TypeId expected_type) const;
+    struct TypeCheckResult {
+        enum TypeCheckResultOption : uint8_t { Ok, ImplicitCast, ExplicitCast, Failure };
 
-    bool check(Expr& expr, TypeId expected, bool allow_pretyped = false);
-    bool check(NodeId node_id, TypeId expected, bool allow_pretyped = false) {
-        if (node_id.is_null()) {
-            _success = false;
-            stc::internal_error("trying to type check node with null id");
-            return false;
-        }
+        TypeCheckResultOption value;
 
-        Expr* expr = ctx.get_node(node_id);
+        constexpr TypeCheckResult(TypeCheckResultOption value)
+            : value{value} {}
 
-        if (expr == nullptr) {
-            _success = false;
-            stc::internal_error("arena returned nullptr for node id during type checking");
-            return false;
-        }
+        constexpr operator bool() const { return value != Failure; }
 
-        return check(*expr, expected, allow_pretyped);
+        constexpr bool operator==(const TypeCheckResultOption& opt) const { return value == opt; }
+    };
+
+    TypeCheckResult check_type_against(TypeId actual_type, TypeId expected_type,
+                                       const Expr& base_expr) const;
+
+    TypeCheckResult check(Expr& expr, TypeId expected, bool allow_pretyped = false,
+                          bool handles_casts = false);
+
+    bool check(NodeId& node_id, TypeId expected, bool allow_pretyped = false);
+    bool check(NodeId& node_id, bool allow_pretyped = false) {
+        return check(node_id, expected_type, allow_pretyped);
     }
 
     TypeId infer(Expr& expr, bool allow_pretyped = false);
@@ -105,6 +108,26 @@ private:
     std::optional<MethodDecl*> find_sig_match(const FunctionDecl& fn_decl,
                                               const std::vector<TypeId>& arg_types,
                                               const Expr& base_expr);
+
+    void wrap_in_cast(NodeId& target, TypeId cast_type, bool explicit_cast, Expr& expr) {
+        assert(!target.is_null() && ctx.get_node(target) != nullptr);
+        assert(ctx.get_node(target) == &expr);
+
+        if (explicit_cast)
+            target = ctx.emplace_node<ExplicitCast>(expr.location, target, cast_type).first;
+        else
+            target = ctx.emplace_node<ImplicitCast>(expr.location, target, cast_type).first;
+    }
+
+    void wrap_in_cast(NodeId& target, TypeId cast_type, bool explicit_cast) {
+        if (target.is_null())
+            throw std::logic_error{"wrap_in_cast called with null id"};
+
+        Expr* expr = ctx.get_node(target);
+        assert(expr != nullptr);
+
+        wrap_in_cast(target, cast_type, explicit_cast, *expr);
+    }
 
     void assert_scopes_notempty() const {
         assert(!scopes.empty() && "Empty scopes list in Julia Sema class");
@@ -216,19 +239,11 @@ private:
             scope.dump(ctx);
     }
 
-    bool check(Expr& expr, bool allow_pretyped = false) {
-        return check(expr, expected_type, allow_pretyped);
-    }
-
-    bool check(NodeId node_id, bool allow_pretyped = false) {
-        return check(node_id, expected_type, allow_pretyped);
-    }
-
     void dump(const Expr& expr) const;
     std::string type_str(TypeId id) const;
 
     TypeId fail(std::string_view msg, const Expr& expr);
-    TypeId warn(std::string_view msg, const Expr& expr);
+    TypeId warn(std::string_view msg, const Expr& expr) const;
     TypeId internal_error(std::string_view msg, const Expr& expr);
 
     // TODO: make this not the case:
