@@ -31,6 +31,21 @@ public:
         sym_plus     = sir_ctx.sym_pool.get_id("+");
         sym_minus    = sir_ctx.sym_pool.get_id("-");
         sym_asterisk = sir_ctx.sym_pool.get_id("*");
+        sym_div      = sir_ctx.sym_pool.get_id("div");
+        sym_caret    = sir_ctx.sym_pool.get_id("^");
+        sym_perc     = sir_ctx.sym_pool.get_id("%");
+        sym_rem      = sir_ctx.sym_pool.get_id("rem");
+        sym_dbl_eq   = sir_ctx.sym_pool.get_id("==");
+        sym_neq      = sir_ctx.sym_pool.get_id("!=");
+        sym_lt       = sir_ctx.sym_pool.get_id("<");
+        sym_leq      = sir_ctx.sym_pool.get_id("<=");
+        sym_gt       = sir_ctx.sym_pool.get_id(">");
+        sym_geq      = sir_ctx.sym_pool.get_id(">=");
+        sym_xor      = sir_ctx.sym_pool.get_id("xor");
+        sym_amper    = sir_ctx.sym_pool.get_id("&");
+        sym_pipe     = sir_ctx.sym_pool.get_id("|");
+        sym_bang     = sir_ctx.sym_pool.get_id("!");
+        sym_tilde    = sir_ctx.sym_pool.get_id("~");
     }
 
     bool pre_visit_ptr(Expr* expr);
@@ -85,7 +100,9 @@ private:
     // skips id-lookup roundtrip for nodes that have already been looked up
     SIRNodeId visit_ptr(Expr* node);
 
-    SymbolId sym_plus, sym_minus, sym_asterisk;
+    SymbolId sym_plus, sym_minus, sym_asterisk, sym_div, sym_caret, sym_perc, sym_rem, sym_dbl_eq,
+        sym_neq, sym_lt, sym_leq, sym_gt, sym_geq, sym_xor, sym_amper, sym_pipe, sym_bang,
+        sym_tilde;
 };
 
 } // namespace stc::jl

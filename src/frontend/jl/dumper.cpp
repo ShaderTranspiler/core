@@ -336,7 +336,6 @@ void JLDumper::visit_Assignment(Assignment& assign) {
     dec_indent();
 }
 
-// CLEANUP: pretty printing for target_fn isa Symbol case
 void JLDumper::visit_FunctionCall(FunctionCall& fn_call) {
     out << indent() << "FunctionCall:\n";
 
@@ -349,6 +348,20 @@ void JLDumper::visit_FunctionCall(FunctionCall& fn_call) {
     inc_indent();
     for (NodeId arg : fn_call.args)
         visit(arg);
+    dec_indent();
+}
+
+void JLDumper::visit_LogicalBinOp(LogicalBinOp& lbo) {
+    out << indent() << "LogicalBinOp (" << (lbo.is_land() ? "&&" : "||") << "):\n";
+
+    out << indent() << dump_label("lhs");
+    inc_indent();
+    visit(lbo.lhs);
+    dec_indent();
+
+    out << indent() << dump_label("rhs");
+    inc_indent();
+    visit(lbo.rhs);
     dec_indent();
 }
 

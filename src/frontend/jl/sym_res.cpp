@@ -289,6 +289,11 @@ void SymbolRes::visit_FunctionCall(FunctionCall& fn_call) {
         visit(arg);
 }
 
+void SymbolRes::visit_LogicalBinOp(LogicalBinOp& lbo) {
+    visit(lbo.lhs);
+    visit(lbo.rhs);
+}
+
 void SymbolRes::visit_IfExpr(IfExpr& if_) {
     visit(if_.condition);
     visit(if_.true_branch);

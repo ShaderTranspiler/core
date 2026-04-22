@@ -6,30 +6,51 @@
 
 namespace {
 
-using OpKind = stc::sir::BinaryOp::OpKind;
+using UnOpKind  = stc::sir::UnaryOp::OpKind;
+using BinOpKind = stc::sir::BinaryOp::OpKind;
 
-std::string op_str(OpKind op) {
+std::string op_str(UnOpKind op) {
+    // clang-format off
     switch (op) {
-        case OpKind::add:
-            return "+";
+        case UnOpKind::plus:  return "plus";
+        case UnOpKind::minus: return "minus";
+        case UnOpKind::lneg:  return "logical negation";
+        case UnOpKind::bneg:  return "bitwise negation";
+    }
+    // clang-format on
 
-        case OpKind::sub:
-            return "-";
+    throw std::logic_error{"unaccounted unary operator kind"};
+}
 
-        case OpKind::mul:
-            return "*";
+std::string op_str(BinOpKind op) {
+#define STC_OP_STR_CASE(tok)                                                                       \
+    case BinOpKind::tok:                                                                           \
+        return #tok;
 
-        case OpKind::div:
-            return "/";
-
-        case OpKind::pow:
-            return "^";
-
-        case OpKind::mod:
-            return "%";
+    switch (op) {
+        STC_OP_STR_CASE(add)
+        STC_OP_STR_CASE(sub)
+        STC_OP_STR_CASE(mul)
+        STC_OP_STR_CASE(div)
+        STC_OP_STR_CASE(pow)
+        STC_OP_STR_CASE(mod)
+        STC_OP_STR_CASE(eq)
+        STC_OP_STR_CASE(neq)
+        STC_OP_STR_CASE(lt)
+        STC_OP_STR_CASE(leq)
+        STC_OP_STR_CASE(gt)
+        STC_OP_STR_CASE(geq)
+        STC_OP_STR_CASE(land)
+        STC_OP_STR_CASE(lor)
+        STC_OP_STR_CASE(lxor)
+        STC_OP_STR_CASE(band)
+        STC_OP_STR_CASE(bor)
+        STC_OP_STR_CASE(bxor)
     }
 
     throw std::logic_error{"Unaccounted binary operator kind"};
+
+#undef STC_OP_STR_CASE
 }
 
 } // namespace
@@ -197,6 +218,15 @@ void SIRDumper::visit_ScopedExpr(ScopedExpr& scoped_expr) {
 
     inc_indent();
     visit(scoped_expr.inner);
+    dec_indent();
+}
+
+void SIRDumper::visit_UnaryOp(UnaryOp& un_op) {
+    out << indent() << "UnaryOp (" << op_str(un_op.op()) << "):\n";
+
+    out << indent() << dump_label("inner");
+    inc_indent();
+    visit(un_op.target);
     dec_indent();
 }
 

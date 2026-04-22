@@ -349,8 +349,28 @@ struct Assignment : public Expr {
     SAME_NODE_KIND_DEF(NodeKind::Assignment)
 };
 
+struct UnaryOp : public Expr {
+    enum class OpKind : uint8_t { plus, minus, lneg, bneg };
+
+    NodeId target;
+
+    explicit UnaryOp(SrcLocationId location, OpKind op, NodeId target)
+        : Expr{location, NodeKind::UnOp, static_cast<uint8_t>(op)}, target{target} {}
+
+    OpKind op() const { return static_cast<OpKind>(node_storage()); }
+
+    SAME_NODE_KIND_DEF(NodeKind::UnOp)
+};
+
 struct BinaryOp : public Expr {
-    enum class OpKind : uint8_t { add, sub, mul, div, pow, mod };
+    // clang-format off
+    enum class OpKind : uint8_t {
+        add,  sub, mul, div, pow, mod,
+        eq,   neq, lt,  leq, gt,  geq,
+        land, lor, lxor,
+        band, bor, bxor
+    };
+    // clang-format on
 
     NodeId lhs, rhs;
 

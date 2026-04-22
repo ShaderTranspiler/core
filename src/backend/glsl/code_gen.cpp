@@ -6,28 +6,47 @@
 namespace {
 
 using BinOpKind = stc::sir::BinaryOp::OpKind;
+using UnOpKind  = stc::sir::UnaryOp::OpKind;
 
-inline char bin_op_kind_str(BinOpKind op) {
+std::string_view un_op_kind_str(UnOpKind op) {
+    // clang-format off
     switch (op) {
-        case BinOpKind::add:
-            return '+';
+        case UnOpKind::plus:  return "+";
+        case UnOpKind::minus: return "-";
+        case UnOpKind::lneg:  return "!";
+        case UnOpKind::bneg:  return "~";
 
-        case BinOpKind::sub:
-            return '-';
+        default:
+            throw std::logic_error{"Unhandled unary op kind in glsl code gen"};
+    }
+    // clang-format on
+}
 
-        case BinOpKind::mul:
-            return '*';
-
-        case BinOpKind::div:
-            return '/';
-
-        case BinOpKind::pow:
-        case BinOpKind::mod:
-            return '?';
+std::string_view bin_op_kind_str(BinOpKind op) {
+    // clang-format off
+    switch (op) {
+        case BinOpKind::add:  return "+";
+        case BinOpKind::sub:  return "-";
+        case BinOpKind::mul:  return "*";
+        case BinOpKind::div:  return "/";
+        case BinOpKind::mod:  return "%";
+        case BinOpKind::eq:   return "==";
+        case BinOpKind::neq:  return "!=";
+        case BinOpKind::lt:   return "<";
+        case BinOpKind::leq:  return "<=";
+        case BinOpKind::gt:   return ">";
+        case BinOpKind::geq:  return ">";
+        case BinOpKind::land: return "&&";
+        case BinOpKind::lor:  return "||";
+        case BinOpKind::lxor: return "^^";
+        case BinOpKind::band: return "&";
+        case BinOpKind::bor:  return "|";
+        case BinOpKind::bxor: return "^";
 
         default:
             throw std::logic_error{"Unhandled binary op kind in glsl code gen"};
     }
+    // clang-format on
 }
 
 } // namespace
@@ -221,7 +240,23 @@ void GLSLCodeGenVisitor::visit_ScopedExpr([[maybe_unused]] ScopedExpr& scoped_ex
     successful_gen = false;
 }
 
+void GLSLCodeGenVisitor::visit_UnaryOp(UnaryOp& un_op) {
+    out << un_op_kind_str(un_op.op()) << '(';
+    visit(un_op.target);
+    out << ')';
+}
+
 void GLSLCodeGenVisitor::visit_BinaryOp(BinaryOp& bin_op) {
+    if (bin_op.op() == BinOpKind::pow) {
+        out << "pow(";
+        visit(bin_op.lhs);
+        out << ", ";
+        visit(bin_op.rhs);
+        out << ")";
+
+        return;
+    }
+
     out << '(';
     visit(bin_op.lhs);
     out << ") " << bin_op_kind_str(bin_op.op()) << " (";

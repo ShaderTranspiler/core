@@ -115,16 +115,6 @@ int transpile(std::string_view code, std::string file_path, stc::TranspilerConfi
         dumper.visit(sir_ast);
     }
 
-    // sir::SIRDumper sir_dumper{glsl_ctx, std::cout};
-    // sir_dumper.visit(sir_ast);
-
-    // sir::SIRSemaVisitor sema_vis{glsl_ctx};
-    // sema_vis.visit(sir_ast);
-    // if (!sema_vis.success()) {
-    //     std::cerr << "SIR semantic verification failed" << std::endl;
-    //     return 1;
-    // }
-
     auto codegen_start = clock::now();
 
     glsl::GLSLCodeGenVisitor code_gen_vis{glsl_ctx};
@@ -138,10 +128,6 @@ int transpile(std::string_view code, std::string file_path, stc::TranspilerConfi
     auto end = clock::now();
 
     if (write_to_file) {
-        // std::ofstream out_file{"out.comp"};
-        // out_file << code_gen_vis.result();
-        // out_file.flush();
-
         // gotta do C-style file writing, cause libjulia messes with std::locale in a way that
         // breaks std::ofstream in release builds
 
@@ -199,7 +185,13 @@ int main(int argc, char* argv[]) {
             dump_lowered = true;
         else if (arg == "--dump-scopes")
             config.dump_scopes = true;
-        else if (arg == "-Wjl_query")
+        else if (arg == "--fwd-fns")
+            config.forward_fns = true;
+        else if (arg == "--conv-fail-reason")
+            config.print_conv_fail_reason = true;
+        else if (arg == "-Wfwd-fns")
+            config.warn_on_fn_forward = true;
+        else if (arg == "-Wjl-query")
             config.warn_on_jl_sema_query = true;
         else if (arg == "--errdump-none")
             err_dump = DumpVerbosity::None;

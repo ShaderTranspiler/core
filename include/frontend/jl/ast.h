@@ -524,6 +524,21 @@ struct FunctionCall : public Expr {
     SAME_NODE_KIND_DEF(NodeKind::FnCall)
 };
 
+struct LogicalBinOp : public Expr {
+    NodeId lhs, rhs;
+
+    explicit LogicalBinOp(SrcLocationId location, NodeId lhs, NodeId rhs, bool is_land)
+        : Expr{location, NodeKind::LogBinOp, static_cast<uint8_t>(is_land)}, lhs{lhs}, rhs{rhs} {
+        ASSERT_NOT_NULL(lhs);
+        ASSERT_NOT_NULL(rhs);
+    }
+
+    bool is_land() const { return static_cast<bool>(node_storage()); }
+    bool is_lor() const { return !is_land(); }
+
+    SAME_NODE_KIND_DEF(NodeKind::LogBinOp)
+};
+
 struct WhileExpr : public Expr {
     NodeId condition, body;
 

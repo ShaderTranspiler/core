@@ -330,6 +330,9 @@ NodeId JLParser::parse_expr(jl_expr_t* expr) {
     if (head == sym_cache.ref)
         return parse_ref(expr, nargs);
 
+    if (head == sym_cache.dbl_amper || head == sym_cache.dbl_pipe)
+        return parse_log_op(expr, nargs);
+
     if (head == sym_cache.break_)
         return emplace_node<BreakStmt>(cur_loc);
 
@@ -339,10 +342,13 @@ NodeId JLParser::parse_expr(jl_expr_t* expr) {
     if (head == sym_cache.arrow)
         return error("arrow functions are not currently supported");
 
-    // TODO: julia dump node
-    jl_static_show(jl_stderr_stream(), reinterpret_cast<jl_value_t*>(expr));
+    error("unsupported Expr node in Julia source code:");
+
+    jl_function_t* dump_fn = ctx.jl_env.module_cache.base_mod.get_fn("dump");
+    jl_call1(dump_fn, reinterpret_cast<jl_value_t*>(expr));
     std::cerr << '\n';
-    return error("unsupported Expr node in Julia source code");
+
+    return NodeId::null_id();
 }
 
 NodeId JLParser::parse_var_decl(jl_expr_t* expr, size_t nargs) {
@@ -773,6 +779,20 @@ NodeId JLParser::parse_ref(jl_expr_t* expr, size_t nargs) {
     }
 
     return emplace_node<IndexerExpr>(base_loc, target, std::move(indexers));
+}
+
+NodeId JLParser::parse_log_op(jl_expr_t* expr, size_t nargs) {
+    assert(expr->head == sym_cache.dbl_amper || expr->head == sym_cache.dbl_pipe);
+
+    if (nargs != 2)
+        return internal_error("unexpected logical operator layout (more or less than two args)");
+
+    SrcLocationId base_loc = cur_loc;
+
+    NodeId lhs = parse(jl_exprarg(expr, 0));
+    NodeId rhs = parse(jl_exprarg(expr, 1));
+
+    return emplace_node<LogicalBinOp>(base_loc, lhs, rhs, expr->head == sym_cache.dbl_amper);
 }
 
 NodeId JLParser::error(std::string_view msg, SrcLocationId loc_id) {

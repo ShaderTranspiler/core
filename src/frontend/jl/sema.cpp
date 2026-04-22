@@ -271,7 +271,7 @@ JLSema::TypeCheckResult JLSema::check_type_against(TypeId actual_type, TypeId ch
         if (ctx.target_info->can_implicit_cast(actual_type, expected_type))
             return TypeCheckResult::ImplicitCast;
 
-        if (ctx.target_info->valid_ctor_call(actual_type, std::vector{expected_type}))
+        if (ctx.target_info->valid_ctor_call(expected_type, std::vector{actual_type}))
             return TypeCheckResult::ExplicitCast;
 
         return TypeCheckResult::Failure;
@@ -400,11 +400,36 @@ JLSema::TypeCheckResult JLSema::check(Expr& expr, TypeId checked_type, bool allo
     TypeCheckResult result = check_type_against(actual_type, checked_type, expr);
     if (result == TypeCheckResult::Failure) {
         // if actual_type is null, that's mostly an already reported error
-        if (_success || !actual_type.is_null())
+        if (_success || !actual_type.is_null()) {
+            std::string reason{""};
+
+            if (ctx.config.print_conv_fail_reason) {
+                bool jl_allows = is_jl_convertible(actual_type, checked_type, tpool);
+                bool target_allows =
+                    ctx.target_info != nullptr &&
+                    (ctx.target_info->can_implicit_cast(actual_type, checked_type) ||
+                     ctx.target_info->valid_ctor_call(checked_type, std::vector{actual_type}));
+
+                if (!jl_allows || !target_allows) {
+                    reason = " (conversion not allowed by ";
+                    if (!jl_allows)
+                        reason += "Julia";
+
+                    if (!target_allows) {
+                        if (!jl_allows)
+                            reason += " and ";
+
+                        reason += "backend";
+                    }
+                    reason += ")";
+                }
+            }
+
             fail(std::format("type mismatch during type checking: cannot convert {} to the "
-                             "expected {} type",
-                             type_str(actual_type), type_str(checked_type)),
+                             "expected {} type{}",
+                             type_str(actual_type), type_str(checked_type), reason),
                  expr);
+        }
 
         return TypeCheckResult::Failure;
     }
@@ -1950,7 +1975,8 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
 
         std::string_view fn_name_str = ctx.get_sym(builtin_fn->fn_name());
 
-        TypeId ret_ty = ctx.target_info->builtin_fn_ret_ty(fn_name_str, arg_types);
+        TypeId ret_ty =
+            ctx.target_info->builtin_fn_ret_ty_with_impl_cast(fn_name_str, arg_types).first;
         if (ret_ty.is_null()) {
             return fail(std::format("builtin function does not have an overload for the inferred "
                                     "argument types (in call to '{}')",
@@ -1978,8 +2004,36 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
         }
     }
 
+    if (!ctx.config.forward_fns) {
+        return fail(
+            std::format("couldn't resolve call to '{}'. to use Julia queried information "
+                        "and blindly pass it down the pipeline, enable function forwarding.",
+                        ctx.get_sym(opaq_fn->fn_name())),
+            fn_call);
+    }
+
     // ret_type_of_jl_call should already print any error necessary
-    return ret_type_of_jl_call(opaq_fn->jl_function, arg_types, fn_call);
+    TypeId ret_type = ret_type_of_jl_call(opaq_fn->jl_function, arg_types, fn_call);
+
+    if (!ret_type.is_null() && ctx.config.warn_on_fn_forward) {
+        warn(std::format(
+                 "sema could only resolve return type of call to function '{}' through Julia. "
+                 "function forwarding is enabled, so the function call will appear with "
+                 "identical typing in the final code.",
+                 ctx.get_sym(opaq_fn->fn_name())),
+             fn_call);
+    }
+
+    return ret_type;
+}
+
+TypeId JLSema::visit_LogicalBinOp(LogicalBinOp& lbo) {
+    TypeId bool_id = tpool.bool_td();
+
+    check(lbo.lhs, bool_id);
+    check(lbo.rhs, bool_id);
+
+    return bool_id;
 }
 
 TypeId JLSema::visit_IfExpr(IfExpr& if_) {

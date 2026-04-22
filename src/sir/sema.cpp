@@ -267,6 +267,10 @@ void SIRSemaVisitor::visit_ScopedExpr(ScopedExpr& scoped_expr) {
     symbols.pop_back();
 }
 
+void SIRSemaVisitor::visit_UnaryOp(UnaryOp& un_op) {
+    visit(un_op.target);
+}
+
 void SIRSemaVisitor::visit_BinaryOp(BinaryOp& bin_op) {
     visit(bin_op.rhs);
     visit(bin_op.lhs);

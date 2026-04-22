@@ -30,6 +30,8 @@ struct JuliaSymbolCache {
     jl_sym_t* dots       = jl_symbol("...");
     jl_sym_t* vect       = jl_symbol("vect"); // [1, 2, 3]
     jl_sym_t* ref        = jl_symbol("ref");  // arr[i]
+    jl_sym_t* dbl_amper  = jl_symbol("&&");
+    jl_sym_t* dbl_pipe   = jl_symbol("||");
 
     // types
     jl_sym_t* Bool    = jl_symbol("Bool");

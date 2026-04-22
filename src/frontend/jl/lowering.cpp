@@ -74,6 +74,18 @@ SIRNodeId JLLoweringVisitor::lower(NodeId global_cmpd_id) {
     for (size_t i = 0; i < body.size();) {
         NodeId expr = body[i];
 
+        if (ctx.isa<MethodDecl>(expr)) {
+            prepended_exprs.emplace_back(expr);
+            body.erase(body.begin() + i);
+
+            continue;
+        }
+
+        if (encountered_real_body) {
+            i++;
+            continue;
+        }
+
         // CLEANUP: cleanup this loop structure a bit
 
         if (auto* vdecl = ctx.get_and_dyn_cast<VarDecl>(expr)) {
@@ -112,13 +124,6 @@ SIRNodeId JLLoweringVisitor::lower(NodeId global_cmpd_id) {
                 encountered_real_body = true;
 
             i++;
-            continue;
-        }
-
-        if (ctx.isa<MethodDecl>(expr)) {
-            prepended_exprs.emplace_back(expr);
-            body.erase(body.begin() + i);
-
             continue;
         }
 
@@ -492,6 +497,9 @@ SIRNodeId JLLoweringVisitor::visit_Assignment(Assignment& assign) {
 }
 
 SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
+    using BinOpKind = sir::BinaryOp::OpKind;
+    using UnOpKind  = sir::UnaryOp::OpKind;
+
     auto* dre = ctx.get_and_dyn_cast<DeclRefExpr>(fn_call.target_fn);
 
     if (dre == nullptr)
@@ -518,20 +526,63 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
     if (fn_identifier.is_null())
         return internal_error("couldn't determine identifier for the target of a function call");
 
-    auto make_binop = [this, &fn_call](sir::BinaryOp::OpKind kind) -> SIRNodeId {
+    auto make_unop = [this, &fn_call](UnOpKind kind) -> SIRNodeId {
+        return emplace_node<sir::UnaryOp>(fn_call.location, kind, visit_and_check(fn_call.args[0]));
+    };
+
+    auto make_binop = [this, &fn_call](BinOpKind kind) -> SIRNodeId {
         return emplace_node<sir::BinaryOp>(fn_call.location, kind, visit_and_check(fn_call.args[0]),
                                            visit_and_check(fn_call.args[1]));
     };
 
-    if (fn_call.args.size() == 2) {
-        assert(!is_ctor);
-
+    if (!is_ctor && fn_call.args.size() == 1) {
         if (fn_identifier == sym_plus)
-            return make_binop(sir::BinaryOp::OpKind::add);
+            return make_unop(UnOpKind::plus);
         if (fn_identifier == sym_minus)
-            return make_binop(sir::BinaryOp::OpKind::sub);
+            return make_unop(UnOpKind::minus);
+        if (fn_identifier == sym_bang)
+            return make_unop(UnOpKind::lneg);
+        if (fn_identifier == sym_tilde)
+            return make_unop(UnOpKind::bneg);
+    } else if (!is_ctor && fn_call.args.size() == 2) {
+        if (fn_identifier == sym_plus)
+            return make_binop(BinOpKind::add);
+        if (fn_identifier == sym_minus)
+            return make_binop(BinOpKind::sub);
         if (fn_identifier == sym_asterisk)
-            return make_binop(sir::BinaryOp::OpKind::mul);
+            return make_binop(BinOpKind::mul);
+        if (fn_identifier == sym_div)
+            return make_binop(BinOpKind::div);
+        if (fn_identifier == sym_caret)
+            return make_binop(BinOpKind::pow);
+        if (fn_identifier == sym_perc || fn_identifier == sym_rem)
+            return make_binop(BinOpKind::mod);
+
+        if (fn_identifier == sym_dbl_eq)
+            return make_binop(BinOpKind::eq);
+        if (fn_identifier == sym_neq)
+            return make_binop(BinOpKind::neq);
+        if (fn_identifier == sym_lt)
+            return make_binop(BinOpKind::lt);
+        if (fn_identifier == sym_leq)
+            return make_binop(BinOpKind::leq);
+        if (fn_identifier == sym_gt)
+            return make_binop(BinOpKind::gt);
+        if (fn_identifier == sym_geq)
+            return make_binop(BinOpKind::geq);
+
+        if (fn_identifier == sym_amper)
+            return make_binop(BinOpKind::band);
+        if (fn_identifier == sym_pipe)
+            return make_binop(BinOpKind::bor);
+
+        if (fn_identifier == sym_xor) {
+            if (fn_call.type == sir_ctx.type_pool.bool_td())
+                return make_binop(BinOpKind::lxor);
+
+            assert(sir_ctx.type_pool.get_td(fn_call.type).is<IntTD>());
+            return make_binop(BinOpKind::bxor);
+        }
     }
 
     std::vector<SIRNodeId> args{};
@@ -544,6 +595,16 @@ SIRNodeId JLLoweringVisitor::visit_FunctionCall(FunctionCall& fn_call) {
         return emplace_node<sir::ConstructorCall>(fn_call.location, fn_call.type, std::move(args));
 
     return emplace_node<sir::FunctionCall>(fn_call.location, fn_identifier, std::move(args));
+}
+
+SIRNodeId JLLoweringVisitor::visit_LogicalBinOp(LogicalBinOp& lbo) {
+    using BinOpKind = sir::BinaryOp::OpKind;
+
+    SIRNodeId lhs = visit_and_check(lbo.lhs);
+    SIRNodeId rhs = visit_and_check(lbo.rhs);
+
+    return lbo.is_land() ? emplace_node<sir::BinaryOp>(lbo.location, BinOpKind::land, lhs, rhs)
+                         : emplace_node<sir::BinaryOp>(lbo.location, BinOpKind::lor, lhs, rhs);
 }
 
 SIRNodeId JLLoweringVisitor::visit_IfExpr(IfExpr& if_) {

@@ -24,6 +24,7 @@ STC_X(ExplicitCast, ExplCast)
 STC_X(DeclRefExpr, DeclRef)
 STC_X(Assignment, Assignment)
 STC_X(FunctionCall, FnCall)
+STC_X(LogicalBinOp, LogBinOp)
 STC_X(WhileExpr, While)
 STC_X_LAST(IfExpr, If)
 

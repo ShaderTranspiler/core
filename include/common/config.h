@@ -16,6 +16,9 @@ struct TranspilerConfig {
     bool use_tabs                    = false;
     bool dump_scopes                 = false;
     bool warn_on_jl_sema_query       = false;
+    bool forward_fns                 = true;
+    bool warn_on_fn_forward          = false;
+    bool print_conv_fail_reason      = false;
 };
 
 } // namespace stc
