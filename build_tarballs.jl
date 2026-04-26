@@ -1,13 +1,6 @@
-using BinaryBuilder, Pkg
+using BinaryBuilder, Pkg, Dates
 
 name = "STC"
-
-prod_dir = joinpath(@__DIR__, "products")
-if isdir(prod_dir)
-    for item in readdir(prod_dir; join=true)
-        rm(item, recursive=true, force=true)
-    end
-end
 
 # a bit hacky, but keeps the CMake file as the single source of truth for versioning
 cmake_content = read("CMakeLists.txt", String)
@@ -22,6 +15,15 @@ git_hash = try
     readchomp(`git rev-parse --short HEAD`)
 catch
     "unknown"
+end
+
+build_date = Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS")
+
+prod_dir = joinpath(@__DIR__, "products")
+if isdir(prod_dir)
+    for item in readdir(prod_dir; join=true)
+        rm(item, recursive=true, force=true)
+    end
 end
 
 # create staging dir, so that local builds are possible without having to delete build and other unnecessary local folders
@@ -56,6 +58,7 @@ cmake .. -DCMAKE_INSTALL_PREFIX=\${prefix} \\
          -DJULIA_LIB_DIR=\${prefix}/lib \\
          -DSTC_JULIA_VERSION=\${ACTUAL_JULIA_VER} \\
          -DSTC_GIT_HASH=$git_hash \\
+         -DSTC_BUILD_DATE=\"$build_date\" \\
          -DNO_DOCS=ON -DNO_SANDBOX=ON -DBUILD_TESTING=OFF \\
          -DNO_SAN=ON -DNO_TIDY=ON
 
@@ -69,6 +72,7 @@ base_platforms = [
     Platform("x86_64", "linux"; libc="glibc"),
     Platform("aarch64", "linux"; libc="glibc"),
     Platform("x86_64", "windows"),
+    Platform("aarch64", "windows"),
     # Platform("x86_64", "macos"),
     # Platform("aarch64", "macos")
 ]

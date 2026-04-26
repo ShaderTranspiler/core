@@ -109,7 +109,7 @@ inline void print_version_info() {
     if (stc::TerminalInfo::supports_color())
         std::cout << val_col;
 
-    std::cout << __DATE__ << ", " << __TIME__ << '\n';
+    std::cout << STC_META_BUILD_DATE << '\n';
 
     if (stc::TerminalInfo::supports_color())
         std::cout << ansi_codes::reset;

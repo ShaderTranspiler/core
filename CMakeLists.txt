@@ -4,7 +4,7 @@ include(FetchContent)
 
 # Version info
 
-project(ShaderTranspilerCore VERSION 0.3.0)
+project(ShaderTranspilerCore VERSION 0.4.0)
 set(STC_VERSION_SUFFIX "")
 set(STC_SOVERSION "0") # for lib ABI-compatibility
 
@@ -28,6 +28,13 @@ endif()
 set(STC_FULL_VERSION "${STC_VERSION}+${STC_GIT_HASH}")
 
 message(STATUS "Build version is ${STC_FULL_VERSION}")
+
+if (NOT STC_BUILD_DATE)
+    string(TIMESTAMP STC_BUILD_DATE "%Y-%m-%d %H:%M:%S")
+    message(STATUS "No build date provided, auto-filled: ${STC_BUILD_DATE}")
+else()
+    message(STATUS "Using provided build date: ${STC_BUILD_DATE}")
+endif()
 
 # Config
 
