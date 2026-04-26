@@ -72,7 +72,10 @@ base_platforms = [
     Platform("x86_64", "linux"; libc="glibc"),
     Platform("aarch64", "linux"; libc="glibc"),
     Platform("x86_64", "windows"),
-    Platform("aarch64", "windows"),
+
+    # this is not supported with gcc
+    # Platform("aarch64", "windows"),
+
     # Platform("x86_64", "macos"),
     # Platform("aarch64", "macos")
 ]
