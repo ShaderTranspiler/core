@@ -6,36 +6,19 @@ The initial aim is to support Julia to GLSL transpilation, for the optimization 
 
 A Julia-side API for the transpiler will also be implemented, as a separate Julia Pkg, that will act as a wrapper for interacting with the "unsafe" C++ code through `ccall`.
 
-# Current Progress
+# Upcoming Tasks and Features
 
-Here is a (very) rough overview of the development timeline and its current progress:
-
-- [x] Project setup (CMake, testing, etc.)
-- [x] Implement base structures and features, like BumpArena, Shader IR (SIR) type system, SIR AST base, etc.
-- [x] Shader IR (SIR) semantic verification pass
-- [x] Julia IR
-- [x] Julia -> SIR lowering
-- [x] GLSL code generation
-- [x] Symbol interning
-- [x] Julia parsing
-- [x] Julia type inference (bidirectional typing)
-- [x] Configuration API
-- [x] Vector, matrix and array types
-- [x] Builtin function sema system, GLSL builtins
-- [x] Qualified types
-- [ ] Julia Pkg API [cpp-side mostly done]
-- [x] Expand supported Julia and GLSL language subsets
-- [ ] Tests
-- [ ] Lambda lifting (low prio) [julia sema is ~90% prepared for this]
-- [ ] Multi-file and multi-function support (low prio)
-- [ ] CI/CD (low prio) [should be as simple as auto running pre-existing CMake targets on GitHub, but it probably won't be]
-- [ ] Wiki (low prio)
-
-Note that these aren't necessarily in "chronological" order, and the points differ vastly in difficulty and time needed to implement them, with earlier points requiring much more effort and research.
+- Tests
+- Lambda lifting (low prio) [julia sema is ~90% prepared for this]
+- Multi-file and multi-function support (low prio)
+- CI/CD (low prio) [should be as simple as auto running pre-existing CMake targets on GitHub, but it probably won't be]
+- Wiki (low prio)
 
 Points marked as `(low prio)` are functionality I don't aim to implement before the thesis submission deadline, but will be nice additions later on.
 
 # Build System
+
+NOTE: this section of the README is a bit outdated and will have to be updated.
 
 The project uses CMake for the build and development pipeline. It pulls together a couple of different tools and build requirements, which are listed below. Entries marked _(optional)_ will not cause the config/build process to fail if they are not available on the development system, but they will be automatically enabled when accessible through PATH (and not explicitly disabled through options).
 
