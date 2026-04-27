@@ -25,7 +25,7 @@ public:
         sym_length = ctx.sym_pool.get_id("length");
 
         out << "#version " << ctx.config.target_version << "\n\n";
-        out << "// THIS CODE WAS AUTO-GENERATED USING A JULIA TO GLSL TRANSPILER\n\n";
+        out << "// THIS CODE WAS AUTO-GENERATED USING THE STC TRANSPILER LIBRARY\n\n";
     }
 
     // ! this performs a move on the internal buffer

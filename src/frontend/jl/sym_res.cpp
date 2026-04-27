@@ -256,6 +256,7 @@ EMPTY_VISITOR_DEF(BuiltinFunction)
 // struct declaration are only allowed at the top level (global scope)
 // SymbolRes is designed to only be ran on local scopes
 EMPTY_VISITOR_DEF(StructDecl)
+EMPTY_VISITOR_DEF(InterfaceBlockDecl)
 EMPTY_VISITOR_DEF(FieldDecl)
 
 void SymbolRes::visit_CompoundExpr(CompoundExpr& cmpd) {

@@ -128,4 +128,36 @@ inline std::optional<QualKind> try_parse_qual(std::string_view str) {
     return std::nullopt;
 }
 
+enum class InterfaceStorage : uint8_t { Uniform, In, Out, Buffer };
+
+inline std::string_view iface_storage_str(InterfaceStorage st) {
+    switch (st) {
+        case InterfaceStorage::In:
+            return "in";
+        case InterfaceStorage::Out:
+            return "out";
+        case InterfaceStorage::Uniform:
+            return "uniform";
+        case InterfaceStorage::Buffer:
+            return "buffer";
+    }
+
+    throw std::logic_error{"unaccounted storage type in iface_storage_str"};
+}
+
+inline QualKind iface_storage_to_qual(InterfaceStorage is) {
+    switch (is) {
+        case InterfaceStorage::In:
+            return QualKind::tq_in;
+        case InterfaceStorage::Out:
+            return QualKind::tq_out;
+        case InterfaceStorage::Uniform:
+            return QualKind::tq_uniform;
+        case InterfaceStorage::Buffer:
+            return QualKind::tq_buffer;
+    }
+
+    throw std::logic_error{"unaccounted interface storage type"};
+}
+
 } // namespace stc::types

@@ -46,7 +46,8 @@ int run(int argc, char* argv[]) {
 
     TranspilerConfig config{};
     size_t ite_count     = 1U;
-    std::string out_path = "out.comp";
+    std::string out_path = "";
+    bool no_out          = false;
     bool run_benchmark   = true;
 
     for (int i = 2; i < argc; i++) {
@@ -76,6 +77,8 @@ int run(int argc, char* argv[]) {
             config.use_tabs = false;
         else if (arg == "--tabs")
             config.use_tabs = true;
+        else if (arg == "--no-out")
+            no_out = true;
         else if (arg == "--fwd-fns")
             config.forward_fns = true;
         else if (arg == "--conv-fail-reason")
@@ -169,6 +172,14 @@ int run(int argc, char* argv[]) {
         }
     }
 
+    if (no_out && out_path != "") {
+        warning(fmt::format("conflicting flags have been provided as arguments: '{}' and '{} {}'.\n"
+                            "no output will be created after transpilation.\n",
+                            stc::colored("--no-out", ansi_codes::cyan),
+                            stc::colored("-o", ansi_codes::cyan),
+                            stc::colored(out_path, ansi_codes::cyan)));
+    }
+
     std::ifstream file(path);
     if (!file.is_open()) {
         std::cerr << "couldn't open input file at '" << path << "'\n";
@@ -202,10 +213,12 @@ int run(int argc, char* argv[]) {
 
     for (size_t i = 0; i < ite_count; i++) {
         if (ite_count != 1) {
-            std::cout << fmt::format("\n======================\n"
-                                     "Transpilation #{}\n"
-                                     "======================\n",
-                                     i + 1);
+            std::string header_title{fmt::format("  Transpilation #{}  ", i + 1)};
+            std::string sep(header_title.size(), '=');
+
+            std::cout << '\n' << sep << '\n';
+            std::cout << header_title << '\n';
+            std::cout << sep << '\n';
         }
 
         auto result = run_benchmark
@@ -214,13 +227,18 @@ int run(int argc, char* argv[]) {
 
         if (!result.has_value()) {
             std::cerr << "\nan error occured during transpilation\n";
-            std::cerr.flush();
             return 1;
         }
 
-        if (i + 1 == ite_count) {
-            // gotta do C-style file writing, cause libjulia messes with std::locale in a way that
-            // breaks std::ofstream in release builds
+        if (!no_out && i + 1 == ite_count) {
+            if (out_path == "") {
+                std::cout << "Output of last transpilation:\n\n";
+                std::cout << *result << '\n';
+                break;
+            }
+
+            // gotta do C-style file writing, because libjulia messes with std::locale in a way that
+            // breaks std::ofstream in some release builds
 
             stc::FileRAII out_file{out_path, "w"};
             if (out_file.get() == nullptr) {

@@ -122,6 +122,7 @@ void GLSLCodeGenVisitor::visit_VarDecl(VarDecl& var_decl) {
 void GLSLCodeGenVisitor::visit_FunctionDecl(FunctionDecl& fn_decl) {
     assert(ctx.isa<ScopedStmt>(fn_decl.body) && "non-scoped-stmt function body not caught by sema");
 
+    out << indent();
     print_quals(ctx.get_quals(fn_decl.qualifiers()), out);
 
     out << type_str(fn_decl.return_type, ctx.type_pool, ctx.sym_pool) << " "
@@ -157,7 +158,7 @@ void GLSLCodeGenVisitor::visit_ParamDecl(ParamDecl& param_decl) {
 }
 
 void GLSLCodeGenVisitor::visit_StructDecl(StructDecl& struct_decl) {
-    out << "struct " << ctx.get_sym(struct_decl.identifier) << "\n{\n";
+    out << indent() << "struct " << ctx.get_sym(struct_decl.identifier) << "\n{\n";
 
     indent_level++;
     for (NodeId field_decl : struct_decl.field_decls) {
@@ -165,7 +166,27 @@ void GLSLCodeGenVisitor::visit_StructDecl(StructDecl& struct_decl) {
                "non-field-decl struct decl field not caught by sema");
 
         visit(field_decl);
-        out << ';';
+        out << ";\n";
+    }
+    indent_level--;
+
+    out << "\n};\n\n";
+}
+
+void GLSLCodeGenVisitor::visit_InterfaceBlockDecl(InterfaceBlockDecl& iface_blk) {
+    out << indent();
+
+    print_quals(ctx.get_quals(iface_blk.qualifiers()), out);
+
+    out << ' ' << ctx.get_sym(iface_blk.block_name()) << "\n{\n";
+
+    indent_level++;
+    for (NodeId field_decl : iface_blk.field_decls) {
+        assert(ctx.isa<FieldDecl>(field_decl) &&
+               "non-field-decl node in interface block decl field list not caught by sema");
+
+        visit(field_decl);
+        out << ";\n";
     }
     indent_level--;
 
@@ -173,9 +194,11 @@ void GLSLCodeGenVisitor::visit_StructDecl(StructDecl& struct_decl) {
 }
 
 void GLSLCodeGenVisitor::visit_FieldDecl(FieldDecl& field_decl) {
+    out << indent();
+
     print_quals(ctx.get_quals(field_decl.qualifiers()), out);
 
-    out << indent() << type_str(field_decl.field_type, ctx.type_pool, ctx.sym_pool) << ' '
+    out << type_str(field_decl.field_type, ctx.type_pool, ctx.sym_pool) << ' '
         << ctx.get_sym(field_decl.identifier);
 }
 
@@ -310,25 +333,6 @@ void GLSLCodeGenVisitor::visit_FieldAccess(FieldAccess& acc) {
         return internal_error("invalid field accessor not caught by sema");
 
     out << ctx.get_sym(fdecl->identifier);
-}
-
-void GLSLCodeGenVisitor::visit_StructInstantiation(StructInstantiation& s_inst) {
-    assert(ctx.type_pool.is_type_of<StructTD>(s_inst.type()) &&
-           "StructInstantiation with non-struct type in AST");
-
-    StructTD s_td = ctx.type_pool.get_td(s_inst.type()).as<StructTD>();
-    assert(s_td.data != nullptr && "StructTD without data storage");
-
-    out << ctx.get_sym(s_td.data->name) << '(';
-
-    for (size_t i = 0; i < s_inst.field_values.size(); i++) {
-        visit(s_inst.field_values[i]);
-
-        if (i != s_inst.field_values.size() - 1)
-            out << ", ";
-    }
-
-    out << ')';
 }
 
 void GLSLCodeGenVisitor::visit_ScopedExpr([[maybe_unused]] ScopedExpr& scoped_expr) {

@@ -274,6 +274,16 @@ struct BuiltinFunction : public Decl {
     SAME_NODE_KIND_DEF(NodeKind::BuiltinFn)
 };
 
+struct FieldDecl : public Decl {
+    explicit FieldDecl(SrcLocationId location, SymbolId identifier, TypeId type)
+        : Decl{location, NodeKind::FieldDecl, identifier, type} {
+
+        ASSERT_NOT_NULL(type);
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::FieldDecl)
+};
+
 struct StructDecl : public Decl {
     std::vector<NodeId> field_decls;
 
@@ -290,14 +300,30 @@ struct StructDecl : public Decl {
     SAME_NODE_KIND_DEF(NodeKind::StructDecl)
 };
 
-struct FieldDecl : public Decl {
-    explicit FieldDecl(SrcLocationId location, SymbolId identifier, TypeId type)
-        : Decl{location, NodeKind::FieldDecl, identifier, type} {
+// block_name (identifier) is mandatory
+// instance_name can be null id
+// does NOT support array of blocks (for now)
+struct InterfaceBlockDecl : public Decl {
+    std::vector<NodeId> field_decls;
+    SymbolId _instance_name;
 
-        ASSERT_NOT_NULL(type);
+    explicit InterfaceBlockDecl(SrcLocationId location, InterfaceStorage storage_type,
+                                SymbolId block_name, std::vector<NodeId> field_decls,
+                                SymbolId instance_name = SymbolId::null_id())
+        : Decl{location, NodeKind::IfaceBlkDecl, block_name, static_cast<uint8_t>(storage_type)},
+          field_decls{std::move(field_decls)},
+          _instance_name{instance_name} {
+
+        ASSERT_NOT_NULL(identifier);
+        ASSERT_CONTAINS_NO_NULL(field_decls);
     }
 
-    SAME_NODE_KIND_DEF(NodeKind::FieldDecl)
+    InterfaceStorage storage_type() const { return InterfaceStorage{node_storage()}; }
+
+    SymbolId block_name() const { return identifier; }
+    SymbolId instance_name() const { return _instance_name; }
+
+    SAME_NODE_KIND_DEF(NodeKind::IfaceBlkDecl)
 };
 
 // ===============

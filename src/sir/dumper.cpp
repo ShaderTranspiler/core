@@ -1,6 +1,7 @@
 #include <fmt/format.h>
 
 #include "sir/dumper.h"
+#include "types/qualifiers.h"
 #include "types/type_descriptors.h"
 #include "types/type_to_string.h"
 
@@ -134,6 +135,25 @@ void SIRDumper::visit_StructDecl(StructDecl& struct_decl) {
     dec_indent();
 }
 
+void SIRDumper::visit_InterfaceBlockDecl(InterfaceBlockDecl& iface_blk) {
+    out << indent() << "InterfaceBlockDecl: " << '\n';
+
+    out << indent() << "storage qualifier: " << iface_storage_str(iface_blk.storage_type());
+    out << indent() << "block name: " << ctx.get_sym(iface_blk.block_name());
+
+    out << indent() << "instance name: ";
+    if (!iface_blk.instance_name().is_null())
+        out << ctx.get_sym(iface_blk.instance_name()) << '\n';
+    else
+        out << "-\n";
+
+    out << indent() << dump_label("fields");
+    inc_indent();
+    for (NodeId decl : iface_blk.field_decls)
+        visit(decl);
+    dec_indent();
+}
+
 void SIRDumper::visit_FieldDecl(FieldDecl& field_decl) {
     out << indent() << "FieldDecl: " << ctx.get_sym(field_decl.identifier) << " ("
         << type_str(field_decl.field_type) << ")\n";
@@ -193,27 +213,6 @@ void SIRDumper::visit_SwizzleLiteral(SwizzleLiteral& swizzle_lit) {
         << fmt::format("SwizzleLiteral: [{}, {}, {}, {}] (count: {})\n", swizzle_lit.comp1(),
                        swizzle_lit.comp2(), swizzle_lit.comp3(), swizzle_lit.comp4(),
                        swizzle_lit.count());
-}
-
-void SIRDumper::visit_StructInstantiation(StructInstantiation& s_inst) {
-    out << indent() << "StructInstantiation (" << type_str(s_inst.type()) << "):\n";
-
-    assert(ctx.type_pool.is_type_of<StructTD>(s_inst.type()));
-    const StructData* s_data = ctx.type_pool.get_td(s_inst.type()).as<StructTD>().data;
-    assert(s_data != nullptr);
-
-    size_t f_idx = 0;
-    for (NodeId f_value : s_inst.field_values) {
-        out << indent()
-            << dump_label(fmt::format("field #{} <=> '{}'", f_idx + 1,
-                                      ctx.get_sym(s_data->fields[f_idx].name)));
-
-        inc_indent();
-        visit(f_value);
-        dec_indent();
-
-        f_idx++;
-    }
 }
 
 void SIRDumper::visit_FieldAccess(FieldAccess& acc) {

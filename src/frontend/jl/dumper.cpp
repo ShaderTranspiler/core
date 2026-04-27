@@ -15,7 +15,7 @@ std::string_view mst_str(MaybeScopeType mst) {
     return scope_str(mst_to_st(mst));
 }
 
-std::string decl_type_str(Decl* decl) {
+std::string_view decl_type_str(Decl* decl) {
     // clang-format off
     #define X(type, kind)                                                                              \
         if (isa<type>(decl)) {                                                                         \
@@ -151,6 +151,21 @@ void JLDumper::visit_StructDecl(StructDecl& struct_) {
         << (struct_.is_mutable() ? "mutable" : "immutable") << "):\n";
 
     dump_with_label("fields", struct_.field_decls);
+}
+
+void JLDumper::visit_InterfaceBlockDecl(InterfaceBlockDecl& iface_blk) {
+    out << indent() << "InterfaceBlockDecl:\n";
+
+    out << indent() << "storage qualifier: " << iface_storage_str(iface_blk.storage_type()) << '\n';
+    out << indent() << "block name: " << iface_blk.block_name() << '\n';
+
+    out << indent() << "instance name: ";
+    if (!iface_blk.instance_name().is_null())
+        out << ctx.get_sym(iface_blk.instance_name()) << '\n';
+    else
+        out << "-\n";
+
+    dump_with_label("fields", iface_blk.field_decls);
 }
 
 void JLDumper::visit_FieldDecl(FieldDecl& field) {

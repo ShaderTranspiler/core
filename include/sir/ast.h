@@ -179,6 +179,16 @@ struct ParamDecl : public Decl {
     SAME_NODE_KIND_DEF(NodeKind::ParamDecl)
 };
 
+struct FieldDecl : public Decl {
+    TypeId field_type;
+
+    explicit FieldDecl(SrcLocationId location, SymbolId field_name, TypeId field_type,
+                       QualId qualifiers = QualId::null_id())
+        : Decl{location, NodeKind::FieldDecl, field_name, qualifiers}, field_type{field_type} {}
+
+    SAME_NODE_KIND_DEF(NodeKind::FieldDecl)
+};
+
 struct StructDecl : public Decl {
     std::vector<NodeId> field_decls;
 
@@ -190,14 +200,26 @@ struct StructDecl : public Decl {
     SAME_NODE_KIND_DEF(NodeKind::StructDecl)
 };
 
-struct FieldDecl : public Decl {
-    TypeId field_type;
+struct InterfaceBlockDecl : public Decl {
+    std::vector<NodeId> field_decls;
+    SymbolId _instance_name;
 
-    explicit FieldDecl(SrcLocationId location, SymbolId field_name, TypeId field_type,
-                       QualId qualifiers = QualId::null_id())
-        : Decl{location, NodeKind::FieldDecl, field_name, qualifiers}, field_type{field_type} {}
+    explicit InterfaceBlockDecl(SrcLocationId location, InterfaceStorage storage,
+                                SymbolId block_name, std::vector<NodeId> field_decls,
+                                SymbolId instance_name, QualId qualifiers = QualId::null_id())
+        : Decl{location, NodeKind::IfaceBlkDecl, block_name, qualifiers,
+               static_cast<uint8_t>(storage)},
+          field_decls{std::move(field_decls)},
+          _instance_name{instance_name} {}
 
-    SAME_NODE_KIND_DEF(NodeKind::FieldDecl)
+    SymbolId block_name() const { return identifier; }
+    SymbolId instance_name() const { return _instance_name; }
+
+    InterfaceStorage storage_type() const {
+        return InterfaceStorage{static_cast<uint8_t>(node_storage() && 0xFF)};
+    }
+
+    SAME_NODE_KIND_DEF(NodeKind::IfaceBlkDecl)
 };
 
 // ===============
@@ -328,19 +350,6 @@ struct SwizzleLiteral : public Expr {
     uint8_t comp4() const { return _comp4; }
 
     SAME_NODE_KIND_DEF(NodeKind::SwizzleLit)
-};
-
-struct StructInstantiation : public Expr {
-    SymbolId struct_name;
-    std::vector<NodeId> field_values;
-
-    explicit StructInstantiation(SrcLocationId location, SymbolId struct_name,
-                                 std::vector<NodeId> field_values)
-        : Expr{location, NodeKind::StructInst},
-          struct_name{struct_name},
-          field_values{std::move(field_values)} {}
-
-    SAME_NODE_KIND_DEF(NodeKind::StructInst)
 };
 
 struct FieldAccess : public Expr {

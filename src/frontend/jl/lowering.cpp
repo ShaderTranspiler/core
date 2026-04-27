@@ -283,6 +283,22 @@ SIRNodeId JLLoweringVisitor::visit_StructDecl(StructDecl& struct_) {
                                          std::move(fields));
 }
 
+SIRNodeId JLLoweringVisitor::visit_InterfaceBlockDecl(InterfaceBlockDecl& iface_blk) {
+    if (iface_blk.field_decls.empty())
+        return fail(fmt::format("empty interface blocks are not allowed (in definition of '{}')",
+                                sir_ctx.get_sym(iface_blk.block_name())));
+
+    std::vector<SIRNodeId> fields{};
+    fields.reserve(iface_blk.field_decls.size());
+
+    for (NodeId field : iface_blk.field_decls)
+        fields.push_back(visit_and_check(field));
+
+    return emplace_decl<sir::InterfaceBlockDecl>(
+        &iface_blk, iface_blk.location, iface_blk.storage_type(), iface_blk.block_name(),
+        std::move(fields), iface_blk.instance_name(), iface_blk.qualifiers);
+}
+
 SIRNodeId JLLoweringVisitor::visit_FieldDecl(FieldDecl& field) {
     return emplace_decl<sir::FieldDecl>(&field, field.location, field.identifier, field.type,
                                         field.qualifiers);

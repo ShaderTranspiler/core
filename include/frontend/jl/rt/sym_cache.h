@@ -58,9 +58,15 @@ struct JuliaSymbolCache {
     jl_sym_t* Nothing = jl_symbol("Nothing");
     jl_sym_t* Vector  = jl_symbol("Vector");
 
+    // API macros
+    jl_sym_t* gl_layout  = jl_symbol("@gl_layout");
+    jl_sym_t* gl_in      = jl_symbol("@gl_in");
+    jl_sym_t* gl_out     = jl_symbol("@gl_out");
+    jl_sym_t* gl_uniform = jl_symbol("@gl_uniform");
+    jl_sym_t* gl_buffer  = jl_symbol("@gl_buffer");
+
     // misc
-    jl_sym_t* none   = jl_symbol("none"); // for LineNumberNode-s without associated files
-    jl_sym_t* layout = jl_symbol("@gl_layout");
+    jl_sym_t* none = jl_symbol("none"); // for LineNumberNode-s without associated files
 };
 
 } // namespace stc::jl::rt

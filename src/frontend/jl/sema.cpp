@@ -1226,6 +1226,35 @@ TypeId JLSema::visit_StructDecl(StructDecl& sdecl) {
     return s_type;
 }
 
+TypeId JLSema::visit_InterfaceBlockDecl(InterfaceBlockDecl& iface_blk) {
+    if (&current_scope() != &global_scope()) {
+        return fail(
+            fmt::format("definition of interface block '{}' in non-global scope is not allowed",
+                        ctx.get_sym(iface_blk.block_name())),
+            iface_blk);
+    }
+
+    if (!iface_blk.instance_name().is_null())
+        return fail("interface block with instance name is currently not supported", iface_blk);
+
+    for (NodeId field_id : iface_blk.field_decls) {
+        const auto* field = ctx.get_and_dyn_cast<FieldDecl>(field_id);
+
+        if (field == nullptr)
+            return internal_error("non-field-declaration node in field list of interface block",
+                                  iface_blk);
+
+        bool added = st_register(field->identifier, ctx.calculate_node_id(*field));
+        if (!added) {
+            return fail(fmt::format("redefinition of name '{}' in the global scope",
+                                    ctx.get_sym(field->identifier)),
+                        *field);
+        }
+    }
+
+    return tpool.void_td();
+}
+
 TypeId JLSema::visit_CompoundExpr(CompoundExpr& cmpd) {
     if (cmpd.body.empty()) {
         if (visiting_method_body)

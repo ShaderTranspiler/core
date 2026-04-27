@@ -46,7 +46,8 @@ inline void print_help() {
     std::cout << stc::colored("general:\n", title_col);
     std::cout << "  " << stc::colored("-h, --help",         flag_col)        << "           show this help message and exit\n";
     std::cout << "  " << stc::colored("-v, --version",      flag_col)        << "        show version information and exit\n";
-    std::cout << "  " << stc::colored("-o <path>",          flag_col)        << "            set output file path (default: out.comp)\n";
+    std::cout << "  " << stc::colored("-o <path>",          flag_col)        << "            set output file path (default: print to console only)\n";
+    std::cout << "  " << stc::colored("--no-out",           flag_col)        << "             do not output the generated code to the console, or to disk\n";
     std::cout << "  " << stc::colored("--gl-version <ver>", flag_col)        << "   set OpenGL version for #version directive (default: \"460\")\n";
     std::cout << "  " << stc::colored("--it <n>",           flag_col)        << "             run transpilation N times (for benchmarking)\n";
     std::cout << "  " << stc::colored("--no-benchmark",     flag_col)        << "       disable the measuring and printing of a transpilation time breakdown\n";

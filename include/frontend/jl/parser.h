@@ -50,7 +50,6 @@ private:
     NodeId parse_vect(jl_expr_t* expr, size_t nargs);
     NodeId parse_ref(jl_expr_t* expr, size_t nargs);
     NodeId parse_log_op(jl_expr_t* expr, size_t nargs);
-    NodeId parse_struct(jl_expr_t* expr, size_t nargs);
 
     // helper parser functions, not participating in the regular parse_expr flow
     std::pair<jl_value_t*, TypeId> parse_type_annotation(jl_expr_t* annot);
@@ -60,6 +59,8 @@ private:
                                 ParseCallback next_parser = &JLParser::parse);
     NodeId parse_param_decl(jl_value_t* param_v);
     NodeId parse_field_decl(jl_value_t* field_decl_v);
+    NodeId parse_struct(jl_expr_t* expr, size_t nargs, bool register_td = true);
+    NodeId parse_interface_block(jl_expr_t* expr, QualKind storage_kind);
     NodeId parse_tuple_assignment(jl_expr_t* expr);
 
     NodeId parse_method_decl(jl_value_t* val) {

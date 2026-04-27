@@ -335,7 +335,7 @@ std::pair<jl_value_t*, TypeId> JLParser::parse_type_annotation(jl_expr_t* annot)
 jl_value_t* JLParser::unwrap_layout_qual(jl_expr_t* lq_expr, std::vector<QualKind>& quals,
                                          LQPayload& lq_payloads) {
     assert(lq_expr->head == sym_cache.macrocall);
-    assert(is_sym(jl_exprarg(lq_expr, 0), sym_cache.layout));
+    assert(is_sym(jl_exprarg(lq_expr, 0), sym_cache.gl_layout));
 
     size_t nargs = jl_expr_nargs(lq_expr);
     for (size_t i = 2; i < nargs - 1; i++) {
@@ -414,6 +414,9 @@ NodeId JLParser::parse_qualified_decl(jl_value_t* qualified_expr, ParseCallback 
     std::vector<QualKind> quals{};
     LQPayload lq_payloads{};
 
+    std::optional<QualKind> iface_blk_qual{}; // in, out, uniform, buffer
+    bool more_than_one_iface_qual = false;
+
     auto* expr_it_v = qualified_expr;
     while (auto* expr_it = to_expr_if(expr_it_v, sym_cache.macrocall)) {
         assert(expr_it->head == sym_cache.macrocall);
@@ -438,7 +441,7 @@ NodeId JLParser::parse_qualified_decl(jl_value_t* qualified_expr, ParseCallback 
         auto* arg1_sym = safe_cast<jl_sym_t>(arg1_v);
 
         // layout qualifiers are handled separately
-        if (arg1_sym == sym_cache.layout) {
+        if (arg1_sym == sym_cache.gl_layout) {
             expr_it_v = unwrap_layout_qual(expr_it, quals, lq_payloads);
             continue;
         }
@@ -446,15 +449,28 @@ NodeId JLParser::parse_qualified_decl(jl_value_t* qualified_expr, ParseCallback 
         std::string_view qual_macro_name = jl_symbol_name(arg1_sym);
 
         std::optional<QualKind> qual = std::nullopt;
-        if (qual_macro_name.size() > 4) {
+        if (qual_macro_name.size() > 4 && qual_macro_name.starts_with("@gl_")) {
             // @gl_x -> x
             std::string_view qual_name{qual_macro_name.begin() + 4, qual_macro_name.end()};
 
             qual = try_parse_qual(qual_name);
 
-            // no macro exists for these, simply discard
-            if (qual.has_value() && is_layout_qual(*qual))
-                qual = std::nullopt;
+            if (qual.has_value()) {
+                QualKind qk = *qual;
+
+                // no macro exists for these, simply discard
+                if (is_layout_qual(qk))
+                    qual = std::nullopt;
+
+                if (qk == QualKind::tq_in || qk == QualKind::tq_out || qk == QualKind::tq_uniform ||
+                    qk == QualKind::tq_buffer) {
+
+                    if (iface_blk_qual.has_value())
+                        more_than_one_iface_qual = true;
+
+                    iface_blk_qual = qk;
+                }
+            }
         }
 
         if (!qual.has_value())
@@ -468,7 +484,16 @@ NodeId JLParser::parse_qualified_decl(jl_value_t* qualified_expr, ParseCallback 
         expr_it_v = jl_exprarg(expr_it, 2);
     }
 
-    NodeId decl_id = (this->*next_parser)(expr_it_v);
+    // intercept pipeline for interface block parsing
+    bool is_iface_blk_decl = iface_blk_qual && is_expr(expr_it_v, sym_cache.struct_);
+
+    if (is_iface_blk_decl && more_than_one_iface_qual)
+        return fail("cannot declare interface block with more than one storage qualifier applied");
+
+    NodeId decl_id = is_iface_blk_decl
+                         ? parse_interface_block(safe_cast<jl_expr_t>(expr_it_v), *iface_blk_qual)
+                         : (this->*next_parser)(expr_it_v);
+
     if (!_success)
         return NodeId::null_id();
 
@@ -1115,7 +1140,7 @@ NodeId JLParser::parse_field_decl(jl_value_t* field_decl_v) {
     return parsed_decl;
 }
 
-NodeId JLParser::parse_struct(jl_expr_t* expr, size_t nargs) {
+NodeId JLParser::parse_struct(jl_expr_t* expr, size_t nargs, bool register_td) {
     assert(expr->head == sym_cache.struct_);
 
     if (nargs != 3)
@@ -1167,7 +1192,8 @@ NodeId JLParser::parse_struct(jl_expr_t* expr, size_t nargs) {
     size_t fields_block_nargs = jl_expr_nargs(field_decls_block);
 
     std::vector<StructData::FieldInfo> field_infos{};
-    field_infos.reserve(fields_block_nargs);
+    if (register_td)
+        field_infos.reserve(fields_block_nargs);
 
     std::unordered_set<SymbolId> field_names{};
     field_names.reserve(fields_block_nargs);
@@ -1197,15 +1223,49 @@ NodeId JLParser::parse_struct(jl_expr_t* expr, size_t nargs) {
             return fail("struct with repeated field names is not allowed");
 
         sdecl->field_decls.emplace_back(parsed_decl);
-        field_infos.emplace_back(fdecl->identifier, fdecl->type);
+
+        if (register_td)
+            field_infos.emplace_back(fdecl->identifier, fdecl->type);
     }
 
     sdecl->field_decls.shrink_to_fit();
-    field_infos.shrink_to_fit();
 
-    ctx.type_pool.make_struct_td(struct_id_sym, std::move(field_infos), ctx);
+    if (register_td) {
+        field_infos.shrink_to_fit();
+
+        ctx.type_pool.make_struct_td(struct_id_sym, std::move(field_infos), ctx);
+    }
 
     return sdecl_id;
+}
+
+NodeId JLParser::parse_interface_block(jl_expr_t* expr, QualKind storage) {
+    assert(expr->head == sym_cache.struct_);
+
+    InterfaceStorage st;
+    if (storage == QualKind::tq_in)
+        st = InterfaceStorage::In;
+    else if (storage == QualKind::tq_out)
+        st = InterfaceStorage::Out;
+    else if (storage == QualKind::tq_uniform)
+        st = InterfaceStorage::Uniform;
+    else if (storage == QualKind::tq_buffer)
+        st = InterfaceStorage::Buffer;
+    else
+        return internal_error("invalid QualKind passed to parse_interface_block for storage");
+
+    // CLEANUP: this could be done less wastefully
+    NodeId parsed_struct = parse_struct(expr, jl_expr_nargs(expr), false);
+
+    if (parsed_struct.is_null())
+        return NodeId::null_id();
+
+    auto* sdecl = ctx.get_and_dyn_cast<StructDecl>(parsed_struct);
+    if (sdecl == nullptr)
+        return internal_error("parse_struct returned non-struct-declaration node");
+
+    return emplace_node<InterfaceBlockDecl>(sdecl->location, st, sdecl->identifier,
+                                            std::move(sdecl->field_decls));
 }
 
 NodeId JLParser::parse_log_op(jl_expr_t* expr, size_t nargs) {

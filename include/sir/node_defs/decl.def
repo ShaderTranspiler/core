@@ -4,6 +4,7 @@ STC_X_FIRST(VarDecl, VarDecl)
 STC_X(FunctionDecl, FuncDecl)
 STC_X(ParamDecl, ParamDecl)
 STC_X(StructDecl, StructDecl)
+STC_X(InterfaceBlockDecl, IfaceBlkDecl)
 STC_X_LAST(FieldDecl, FieldDecl)
 
 #include "common/x_macros/end_def.inc"
