@@ -1446,18 +1446,16 @@ TypeId JLSema::visit_IndexerExpr(IndexerExpr& idx_expr) {
     if (coll_type.is_null())
         return fail("failed to infer type for target of an indexer expression", idx_expr);
 
-    if (is_checking()) {
+    if (is_checking() && tpool.get_td(expected_type).is_scalar()) {
         TypeCheckResult res = TypeCheckResult::Incompatible;
 
-        if (tpool.get_td(expected_type).is_scalar()) {
-            res = check_type_against(coll_type, tpool.any_vec_td(expected_type), idx_expr);
+        res = check_type_against(coll_type, tpool.any_vec_td(expected_type), idx_expr);
 
-            if (!res)
-                res = check_type_against(coll_type, tpool.any_mat_td(expected_type), idx_expr);
+        if (res == TypeCheckResult::Incompatible)
+            res = check_type_against(coll_type, tpool.any_mat_td(expected_type), idx_expr);
 
-            if (!res)
-                res = check_type_against(coll_type, tpool.any_array_td(expected_type), idx_expr);
-        }
+        if (res == TypeCheckResult::Incompatible)
+            res = check_type_against(coll_type, tpool.any_array_td(expected_type), idx_expr);
 
         // this explicitly disallows casting on the target's type
         if (res != TypeCheckResult::Match) {

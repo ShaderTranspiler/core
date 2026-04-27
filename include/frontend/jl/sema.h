@@ -64,8 +64,6 @@ public:
         constexpr TypeCheckResult(TypeCheckResultOption value)
             : value{value} {}
 
-        constexpr operator bool() const { return value != Incompatible; }
-
         constexpr bool operator==(const TypeCheckResultOption& opt) const { return value == opt; }
     };
 

@@ -863,6 +863,9 @@ NodeId JLParser::parse_update_assignment(jl_expr_t* expr, size_t nargs) {
     std::string_view fn_sym =
         head_sv.substr(is_broadcast ? 1 : 0, head_sv.size() - (is_broadcast ? 2 : 1));
 
+    if (fn_sym.empty())
+        return fail("broadcasting on regular assignment is currently not supported");
+
     NodeId fn_dre        = emplace_decl_ref(assign_loc, fn_sym);
     NodeId parsed_target = parse(jl_exprarg(expr, 0));
     NodeId parsed_value  = parse(jl_exprarg(expr, 1));
