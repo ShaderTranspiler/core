@@ -19,9 +19,11 @@ MaybeString transpile_parsed(jl::NodeId jl_ast, jl::JLCtx& jl_ctx,
 
 template <bool RunBenchmark>
 MaybeString transpile(std::string_view code, std::optional<std::string_view> file_path,
-                      stc::TranspilerConfig config);
+                      stc::TranspilerConfig config,
+                      std::string_view juliaglm_path = "Main.JuliaGLM");
 
 template <bool RunBenchmark>
-MaybeString transpile(jl_value_t* expr_v, stc::TranspilerConfig config);
+MaybeString transpile(jl_value_t* expr_v, stc::TranspilerConfig config,
+                      std::string_view juliaglm_path = "Main.JuliaGLM");
 
 }; // namespace stc::api

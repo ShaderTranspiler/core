@@ -437,7 +437,7 @@ JLSema::TypeCheckResult JLSema::check(Expr& expr, TypeId checked_type, bool allo
         if (_success || !actual_type.is_null()) {
             std::string reason{};
 
-            if (ctx.config.print_conv_fail_reason) {
+            if (ctx.config.print_convert_fail_reason) {
                 bool jl_allows = is_jl_convertible(actual_type, checked_type, tpool);
                 bool target_allows =
                     ctx.target_info != nullptr &&

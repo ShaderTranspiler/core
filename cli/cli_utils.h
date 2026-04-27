@@ -26,8 +26,8 @@ inline std::filesystem::path tail_from_cwd(const std::filesystem::path& p) {
     return abs;
 }
 
-inline std::optional<std::size_t> try_parse_size_t(const std::string& str) {
-    size_t value    = 0;
+inline std::optional<std::uint16_t> try_parse_u16(const std::string& str) {
+    uint16_t value  = 0;
     auto [ptr, err] = std::from_chars(str.data(), str.data() + str.size(), value);
 
     if (err == std::errc() && ptr == str.data() + str.size())

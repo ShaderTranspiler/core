@@ -278,8 +278,7 @@ void JLDumper::visit_OpaqueNode(OpaqueNode& opaq) {
 }
 
 void JLDumper::visit_GlobalRef(GlobalRef& ref) {
-    out << indent() << "GlobalRef: " << sym(ref.sym_name) << " in module #"
-        << std::to_string(ref.module.value);
+    out << indent() << "GlobalRef: " << sym(ref.sym_name) << " in module at " << ref.module;
 }
 
 void JLDumper::visit_ImplicitCast(ImplicitCast& impl_cast) {

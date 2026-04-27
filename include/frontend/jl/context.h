@@ -2,7 +2,6 @@
 
 #include "ast/context.h"
 #include "frontend/jl/ast.h"
-#include "frontend/jl/module_pool.h"
 #include "frontend/jl/rt/env.h"
 
 namespace stc::jl {
@@ -18,9 +17,7 @@ class JLCtx : public ASTCtx<NodeId, Expr> {
     using Base = ASTCtx<NodeId, Expr>;
 
 public:
-    rt::JuliaRTEnv jl_env{};
-
-    ModulePool module_pool;
+    rt::JuliaRTEnv jl_env;
 
     // clang-format off
     #define X(type) types::TypeId type() const { return _##type; }
@@ -28,10 +25,11 @@ public:
     #undef X
     // clang-format on
 
-    explicit JLCtx(const TargetInfo* target_info = nullptr, NodeId::id_type node_arena_kb = 128U,
+    explicit JLCtx(std::string_view juliaglm_path = "Main.JuliaGLM",
+                   const TargetInfo* target_info = nullptr, NodeId::id_type node_arena_kb = 128U,
                    SrcLocationId::id_type src_info_arena_kb = 128U,
                    TypeId::id_type type_arena_kb = 32U, SymbolId::id_type sym_arena_kb = 64U,
-                   QualId::id_type qual_arena_kb = 16U, ModuleId::id_type module_arena_b = 512U)
+                   QualId::id_type qual_arena_kb = 16U)
         : ASTCtx{{{BuiltinTypeKind::Nothing}, {BuiltinTypeKind::String}, {BuiltinTypeKind::Symbol}},
                  target_info,
                  node_arena_kb,
@@ -39,7 +37,7 @@ public:
                  type_arena_kb,
                  sym_arena_kb,
                  qual_arena_kb},
-          module_pool{module_arena_b} {
+          jl_env{juliaglm_path} {
 
         init_jl_types();
     }

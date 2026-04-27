@@ -5,7 +5,6 @@
 #include "base.h"
 #include "common/src_info.h"
 #include "common/utils.h"
-#include "frontend/jl/module_pool.h"
 #include "types/qualifier_pool.h"
 #include "types/type_pool.h"
 
@@ -492,13 +491,13 @@ struct OpaqueNode : public Expr {
 };
 
 struct GlobalRef : public Expr {
-    ModuleId module;
+    jl_module_t* module;
     SymbolId sym_name;
 
-    explicit GlobalRef(SrcLocationId location, ModuleId module, SymbolId sym_name)
+    explicit GlobalRef(SrcLocationId location, jl_module_t* module, SymbolId sym_name)
         : Expr{location, NodeKind::GlobalRef}, module{module}, sym_name{sym_name} {
 
-        ASSERT_NOT_NULL(module);
+        assert(module != nullptr);
         ASSERT_NOT_NULL(sym_name);
     }
 

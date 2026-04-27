@@ -83,7 +83,7 @@ template MaybeString transpile_parsed<false>(jl::NodeId, jl::JLCtx&,
 
 template <bool RunBenchmark>
 MaybeString transpile(std::string_view code, std::optional<std::string_view> file_path,
-                      stc::TranspilerConfig config) {
+                      stc::TranspilerConfig config, std::string_view juliaglm_path) {
     using namespace stc::jl;
 
     detail::BenchmarkTracker<RunBenchmark> benchmark_tracker{};
@@ -91,7 +91,7 @@ MaybeString transpile(std::string_view code, std::optional<std::string_view> fil
     benchmark_tracker.start();
     benchmark_tracker.init_start();
 
-    JLCtx jl_ctx{};
+    JLCtx jl_ctx{juliaglm_path};
     jl_ctx.config = std::move(config);
 
     glsl::GLSLTargetInfo target_info{jl_ctx.type_pool};
@@ -123,12 +123,13 @@ MaybeString transpile(std::string_view code, std::optional<std::string_view> fil
 }
 
 template MaybeString transpile<true>(std::string_view, std::optional<std::string_view>,
-                                     stc::TranspilerConfig);
+                                     stc::TranspilerConfig, std::string_view);
 template MaybeString transpile<false>(std::string_view, std::optional<std::string_view>,
-                                      stc::TranspilerConfig);
+                                      stc::TranspilerConfig, std::string_view);
 
 template <bool RunBenchmark>
-MaybeString transpile(jl_value_t* expr_v, stc::TranspilerConfig config) {
+MaybeString transpile(jl_value_t* expr_v, stc::TranspilerConfig config,
+                      std::string_view juliaglm_path) {
     using namespace stc::jl;
 
     detail::BenchmarkTracker<RunBenchmark> benchmark_tracker{};
@@ -136,7 +137,7 @@ MaybeString transpile(jl_value_t* expr_v, stc::TranspilerConfig config) {
     benchmark_tracker.start();
     benchmark_tracker.init_start();
 
-    JLCtx jl_ctx{};
+    JLCtx jl_ctx{juliaglm_path};
     jl_ctx.config = std::move(config);
 
     glsl::GLSLTargetInfo target_info{jl_ctx.type_pool};
@@ -164,7 +165,7 @@ MaybeString transpile(jl_value_t* expr_v, stc::TranspilerConfig config) {
     return transpile_parsed<RunBenchmark>(jl_ast, jl_ctx, benchmark_tracker);
 }
 
-template MaybeString transpile<true>(jl_value_t*, stc::TranspilerConfig);
-template MaybeString transpile<false>(jl_value_t*, stc::TranspilerConfig);
+template MaybeString transpile<true>(jl_value_t*, stc::TranspilerConfig, std::string_view);
+template MaybeString transpile<false>(jl_value_t*, stc::TranspilerConfig, std::string_view);
 
 } // namespace stc::api

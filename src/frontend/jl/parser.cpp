@@ -181,10 +181,9 @@ NodeId JLParser::parse(jl_value_t* node) {
         // ! name::Symbol
         auto* name   = safe_cast<jl_sym_t>(safe_fieldref(node, 1, "name"));
 
-        ModuleId mod_id  = ctx.module_pool.get_id(module);
         SymbolId name_id = ctx.sym_pool.get_id(jl_symbol_name(name));
 
-        NodeId glob_ref = emplace_node<GlobalRef>(cur_loc, mod_id, name_id);
+        NodeId glob_ref = emplace_node<GlobalRef>(cur_loc, module, name_id);
 
         return emplace_node<DeclRefExpr>(cur_loc, glob_ref);
     }
@@ -1242,7 +1241,7 @@ NodeId JLParser::parse_struct(jl_expr_t* expr, size_t nargs, bool register_td) {
 NodeId JLParser::parse_interface_block(jl_expr_t* expr, QualKind storage) {
     assert(expr->head == sym_cache.struct_);
 
-    InterfaceStorage st;
+    InterfaceStorage st{};
     if (storage == QualKind::tq_in)
         st = InterfaceStorage::In;
     else if (storage == QualKind::tq_out)

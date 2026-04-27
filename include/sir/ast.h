@@ -216,7 +216,7 @@ struct InterfaceBlockDecl : public Decl {
     SymbolId instance_name() const { return _instance_name; }
 
     InterfaceStorage storage_type() const {
-        return InterfaceStorage{static_cast<uint8_t>(node_storage() && 0xFF)};
+        return InterfaceStorage{static_cast<uint8_t>(node_storage() & 0xFF)};
     }
 
     SAME_NODE_KIND_DEF(NodeKind::IfaceBlkDecl)

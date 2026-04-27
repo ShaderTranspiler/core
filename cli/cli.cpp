@@ -45,10 +45,10 @@ int run(int argc, char* argv[]) {
     std::string path = argv[1];
 
     TranspilerConfig config{};
-    size_t ite_count     = 1U;
-    std::string out_path = "";
-    bool no_out          = false;
-    bool run_benchmark   = true;
+    std::string out_path{};
+    uint16_t ite_count = 1U;
+    bool run_benchmark = true;
+    bool no_out        = false;
 
     for (int i = 2; i < argc; i++) {
         std::string arg{argv[i]};
@@ -82,7 +82,7 @@ int run(int argc, char* argv[]) {
         else if (arg == "--fwd-fns")
             config.forward_fns = true;
         else if (arg == "--conv-fail-reason")
-            config.print_conv_fail_reason = true;
+            config.print_convert_fail_reason = true;
         else if (arg == "--track-bindings")
             config.track_bindings = true;
         else if (arg == "--no-coerce-i32")
@@ -125,7 +125,7 @@ int run(int argc, char* argv[]) {
             }
 
             std::string next_arg{argv[i + 1]};
-            auto maybe_ite_count = try_parse_size_t(next_arg);
+            auto maybe_ite_count = try_parse_u16(next_arg);
 
             if (!maybe_ite_count.has_value()) {
                 std::cerr << "--it followed by a non-numeric string\n";
@@ -141,7 +141,7 @@ int run(int argc, char* argv[]) {
                 return 1;
             }
 
-            auto maybe_cg_indent = try_parse_size_t(std::string{argv[i + 1]});
+            auto maybe_cg_indent = try_parse_u16(std::string{argv[i + 1]});
 
             if (!maybe_cg_indent.has_value()) {
                 std::cerr << "--cg-indent followed by a non-numeric string\n";
@@ -172,7 +172,7 @@ int run(int argc, char* argv[]) {
         }
     }
 
-    if (no_out && out_path != "") {
+    if (no_out && !out_path.empty()) {
         warning(fmt::format("conflicting flags have been provided as arguments: '{}' and '{} {}'.\n"
                             "no output will be created after transpilation.\n",
                             stc::colored("--no-out", ansi_codes::cyan),
@@ -231,7 +231,7 @@ int run(int argc, char* argv[]) {
         }
 
         if (!no_out && i + 1 == ite_count) {
-            if (out_path == "") {
+            if (out_path.empty()) {
                 std::cout << "Output of last transpilation:\n\n";
                 std::cout << *result << '\n';
                 break;

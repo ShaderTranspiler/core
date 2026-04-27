@@ -11,7 +11,7 @@ namespace stc::jl::rt {
 // only ever retrieved once through libjulia. it's intended use is for things like symbol caching,
 // Base/Core function caching, module caching (in some scenarios), etc.
 // it should never be used to cache things that are not guaranteed to be rooted by the julia GC for
-// the lifetime of JuliaRTCache
+// the lifetime of JuliaRTEnv
 struct JuliaRTEnv {
     JuliaModuleCache module_cache;
     JuliaSymbolCache symbol_cache;
@@ -19,6 +19,9 @@ struct JuliaRTEnv {
 
     explicit JuliaRTEnv()
         : module_cache{}, symbol_cache{}, type_cache{module_cache} {}
+
+    explicit JuliaRTEnv(std::string_view juliaglm_path)
+        : module_cache{juliaglm_path}, symbol_cache{}, type_cache{module_cache} {}
 };
 
 } // namespace stc::jl::rt
