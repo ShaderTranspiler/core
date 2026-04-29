@@ -71,9 +71,9 @@ SIRNodeId JLLoweringVisitor::lower(NodeId global_cmpd_id) {
 
     // lift global var decls (including implicit ones) and method decls to the top
     std::vector<NodeId> prepended_exprs{};
-    bool encountered_real_body = false;
-    NodeId explicit_main       = NodeId::null_id(); // TODO: error on redecl
-    size_t struct_count        = 0;
+    bool encountered_real_body  = false;
+    NodeId explicit_main        = NodeId::null_id(); // TODO: error on redecl
+    size_t struct_and_iface_cnt = 0;
     for (size_t i = 0; i < body.size();) {
         NodeId expr    = body[i];
         auto ptrdiff_i = static_cast<ptrdiff_t>(i);
@@ -93,11 +93,11 @@ SIRNodeId JLLoweringVisitor::lower(NodeId global_cmpd_id) {
             continue;
         }
 
-        if (ctx.isa<StructDecl>(expr)) {
-            prepended_exprs.insert(prepended_exprs.begin() + static_cast<ptrdiff_t>(struct_count),
-                                   expr);
+        if (ctx.isa<StructDecl>(expr) || ctx.isa<InterfaceBlockDecl>(expr)) {
+            prepended_exprs.insert(
+                prepended_exprs.begin() + static_cast<ptrdiff_t>(struct_and_iface_cnt), expr);
             body.erase(body.begin() + ptrdiff_i);
-            struct_count++;
+            struct_and_iface_cnt++;
 
             continue;
         }

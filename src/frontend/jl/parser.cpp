@@ -114,6 +114,9 @@ TypeId JLParser::resolve_type(jl_value_t* type) {
             return TypeId::null_id();
         }
 
+        jl_value_t* el_type = jl_exprarg(type_expr, 1);
+        LazyInit res_el_type{[&]() -> TypeId { return resolve_type(el_type); }};
+
         auto* type_base_sym = safe_cast<jl_sym_t>(type_base);
 
         if (type_base_sym == sym_cache.Vector) {
@@ -122,12 +125,86 @@ TypeId JLParser::resolve_type(jl_value_t* type) {
                 return TypeId::null_id();
             }
 
-            jl_value_t* el_type = jl_exprarg(type_expr, 1);
-            TypeId res_el_type  = resolve_type(el_type);
-            if (res_el_type.is_null())
+            if (res_el_type.get().is_null())
                 return TypeId::null_id();
 
-            return ctx.type_pool.any_array_td(res_el_type);
+            return ctx.type_pool.any_array_td(res_el_type.get());
+        }
+
+        if (type_base_sym == sym_cache.VecTN || type_base_sym == sym_cache.VecNT) {
+            std::string_view vec_base = type_base_sym == sym_cache.VecTN ? "VecTN" : "VecNT";
+
+            auto parse_T = [&](jl_value_t* type_v) -> TypeId {
+                TypeId el_ty      = resolve_type(type_v);
+                const auto& el_td = ctx.type_pool.get_td(el_ty);
+                if (!el_td.is_scalar()) {
+                    fail(fmt::format("invalid {} component type (expected scalar type)", vec_base));
+                    return TypeId::null_id();
+                }
+
+                return el_ty;
+            };
+
+            auto parse_N = [&](jl_value_t* n_v) -> uint32_t {
+                if (!jl_is_int64(n_v)) {
+                    fail(fmt::format("invalid {} component count type (expected Int64)", vec_base));
+                    return 0;
+                }
+
+                int64_t n = jl_unbox_int64(n_v);
+
+                if (n < 2 || n > 4) {
+                    fail(fmt::format("invalid {} component count value (n not between 2 and 4)",
+                                     vec_base));
+                    return 0;
+                }
+
+                return static_cast<uint32_t>(n);
+            };
+
+            if (jl_expr_nargs(type_expr) != 3) {
+                fail(fmt::format("invalid {} type layout (expected two args)", vec_base));
+                return TypeId::null_id();
+            }
+
+            TypeId el_type_id = TypeId::null_id();
+            uint32_t comp_cnt = 0;
+
+            if (type_base_sym == sym_cache.VecTN) {
+                el_type_id = parse_T(jl_exprarg(type_expr, 1));
+                comp_cnt   = parse_N(jl_exprarg(type_expr, 2));
+            } else {
+                comp_cnt   = parse_N(jl_exprarg(type_expr, 1));
+                el_type_id = parse_T(jl_exprarg(type_expr, 2));
+            }
+
+            if (el_type_id.is_null() || comp_cnt == 0) {
+                assert(!_success);
+                return TypeId::null_id();
+            }
+
+            return ctx.type_pool.vector_td(el_type_id, comp_cnt);
+        }
+
+        if (type_base_sym == sym_cache.Vec2T || type_base_sym == sym_cache.Vec3T ||
+            type_base_sym == sym_cache.Vec4T) {
+
+            if (res_el_type.get().is_null())
+                return TypeId::null_id();
+
+            const auto& el_td = ctx.type_pool.get_td(res_el_type.get());
+            if (!el_td.is_scalar()) {
+                fail("VecNT type with non-scalar T is not allowed");
+                return TypeId::null_id();
+            }
+
+            uint32_t n = 2;
+            if (type_base_sym == sym_cache.Vec3T)
+                n = 3;
+            else if (type_base_sym == sym_cache.Vec4T)
+                n = 4;
+
+            return ctx.type_pool.vector_td(res_el_type.get(), n);
         }
 
         fail("general parametric types are currently not supported");

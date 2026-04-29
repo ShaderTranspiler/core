@@ -2040,6 +2040,14 @@ TypeId JLSema::visit_Assignment(Assignment& assign) {
         }
     }
 
+    if (target_type.is_null()) {
+        if (_success)
+            return fail("couldn't infer type for assignment, whose lhs is not a new binding",
+                        assign);
+
+        return TypeId::null_id();
+    }
+
     check(assign.value, target_type);
 
     return target_type;

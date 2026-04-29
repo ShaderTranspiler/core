@@ -31,9 +31,7 @@ struct JuliaTypeCache {
     jl_datatype_t *bvec2, *bvec3, *bvec4;
 
     jl_unionall_t* vec_nt_ua;
-    jl_unionall_t* vec_2t_ua;
-    jl_unionall_t* vec_3t_ua;
-    jl_unionall_t* vec_4t_ua;
+    jl_unionall_t* vec_tn_ua;
 
     jl_unionall_t* mat_nmt_ua;
 
@@ -77,9 +75,7 @@ struct JuliaTypeCache {
         bvec4 = get_dt_from(mod_cache.glm_mod, "BVec4");
 
         vec_nt_ua = get_ua_from(mod_cache.glm_mod, "VecNT");
-        vec_2t_ua = get_ua_from(mod_cache.glm_mod, "Vec2T");
-        vec_3t_ua = get_ua_from(mod_cache.glm_mod, "Vec3T");
-        vec_4t_ua = get_ua_from(mod_cache.glm_mod, "Vec4T");
+        vec_tn_ua = get_ua_from(mod_cache.glm_mod, "VecTN");
 
         mat_nmt_ua = get_ua_from(mod_cache.glm_mod, "MatNxMT");
     }

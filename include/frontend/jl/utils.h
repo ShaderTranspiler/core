@@ -126,6 +126,9 @@ inline bool is_jl_convertible(TypeId from, TypeId to, const TypePool& type_pool)
     if (from == to)
         return true;
 
+    if (from.is_null() || to.is_null())
+        return false;
+
     const auto& from_td = type_pool.get_td(from);
     const auto& to_td   = type_pool.get_td(to);
 

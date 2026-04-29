@@ -30,3 +30,6 @@ products/
 
 # Samply output
 profile.json.gz
+
+# Dump files
+*.dmp

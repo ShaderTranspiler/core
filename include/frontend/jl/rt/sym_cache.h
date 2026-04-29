@@ -57,6 +57,11 @@ struct JuliaSymbolCache {
     jl_sym_t* Symbol  = jl_symbol("Symbol");
     jl_sym_t* Nothing = jl_symbol("Nothing");
     jl_sym_t* Vector  = jl_symbol("Vector");
+    jl_sym_t* Vec2T   = jl_symbol("Vec2T");
+    jl_sym_t* Vec3T   = jl_symbol("Vec3T");
+    jl_sym_t* Vec4T   = jl_symbol("Vec4T");
+    jl_sym_t* VecTN   = jl_symbol("VecTN");
+    jl_sym_t* VecNT   = jl_symbol("VecNT");
 
     // API macros
     jl_sym_t* gl_layout  = jl_symbol("@gl_layout");

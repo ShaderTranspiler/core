@@ -185,45 +185,53 @@ TypeId parse_jl_type(jl_datatype_t* dt, JLCtx& ctx) {
         }
     }
 
+#define STC_CHECK_VEC_NT(n, prefix, jl_el_type)                                                    \
+    if (dt == type_cache.prefix##vec##n)                                                           \
+        return ctx.type_pool.vector_td((jl_el_type), (n));
+
+#define STC_CHECK_VEC_TS(prefix, jl_el_type)                                                       \
+    STC_CHECK_VEC_NT(2, prefix, jl_el_type);                                                       \
+    STC_CHECK_VEC_NT(3, prefix, jl_el_type);                                                       \
+    STC_CHECK_VEC_NT(4, prefix, jl_el_type);
+
+    STC_CHECK_VEC_TS(, ctx.jl_Float32_t())
+    STC_CHECK_VEC_TS(d, ctx.jl_Float64_t())
+    STC_CHECK_VEC_TS(i, ctx.jl_Int32_t())
+    STC_CHECK_VEC_TS(u, ctx.jl_UInt32_t())
+
+#undef STC_CHECK_VEC_TS
+#undef STC_CHECK_VEC_NT
+
     bool is_vec_nt = is_spec_of(dt, type_cache.vec_nt_ua),
-         is_vec_2t = is_spec_of(dt, type_cache.vec_2t_ua),
-         is_vec_3t = is_spec_of(dt, type_cache.vec_3t_ua),
-         is_vec_4t = is_spec_of(dt, type_cache.vec_4t_ua),
-         is_vec    = is_vec_nt || is_vec_2t || is_vec_3t || is_vec_4t;
+         is_vec_tn = is_spec_of(dt, type_cache.vec_tn_ua);
 
     // TODO: 32/64 bit env handling
-    if (is_vec) {
+    if (is_vec_nt || is_vec_tn) {
         size_t n = 0;
 
         jl_value_t* t_tp = nullptr;
+        jl_value_t* n_tp = nullptr;
         if (is_vec_nt) {
-            jl_value_t* n_tp = jl_tparam0(dt);
-            t_tp             = jl_tparam1(dt);
-
-            if (!jl_is_int64(n_tp))
-                throw std::logic_error{"unexpected non-int64 type param in VecNT type's N"};
-
-            int64_t n_i64 = jl_unbox_int64(n_tp);
-
-            if (n_i64 < 1)
-                throw std::runtime_error{"non-positive N value for VecNT's N type param"};
-
-            static constexpr auto u32_max =
-                static_cast<int64_t>(std::numeric_limits<uint32_t>::max());
-            if (n_i64 > u32_max)
-                throw std::runtime_error{"N value for VecNT's N type param is too large"};
-
-            n = static_cast<uint32_t>(n_i64);
+            n_tp = jl_tparam0(dt);
+            t_tp = jl_tparam1(dt);
         } else {
             t_tp = jl_tparam0(dt);
-
-            if (is_vec_2t)
-                n = 2;
-            else if (is_vec_3t)
-                n = 3;
-            else if (is_vec_4t)
-                n = 4;
+            n_tp = jl_tparam1(dt);
         }
+
+        if (!jl_is_int64(n_tp))
+            throw std::logic_error{"unexpected non-int64 type param in VecNT type's N"};
+
+        int64_t n_i64 = jl_unbox_int64(n_tp);
+
+        if (n_i64 < 1)
+            throw std::runtime_error{"non-positive N value for VecNT's N type param"};
+
+        static constexpr auto u32_max = static_cast<int64_t>(std::numeric_limits<uint32_t>::max());
+        if (n_i64 > u32_max)
+            throw std::runtime_error{"N value for VecNT's N type param is too large"};
+
+        n = static_cast<uint32_t>(n_i64);
 
         assert(t_tp != nullptr);
         assert(n != 0);

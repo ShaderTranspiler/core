@@ -72,6 +72,9 @@ std::string TypeToStringVisitor::visit(MatrixTD mat_td) {
 }
 
 std::string TypeToStringVisitor::visit(ArrayTD arr_td) {
+    if (arr_td.length == std::numeric_limits<uint32_t>::max())
+        return fmt::format("any sized arr of ({})", dispatch(arr_td.element_type_id));
+
     return fmt::format("array[{}] of ({})", arr_td.length, dispatch(arr_td.element_type_id));
 }
 
