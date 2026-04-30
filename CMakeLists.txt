@@ -4,11 +4,15 @@ include(FetchContent)
 
 # Version info
 
-project(ShaderTranspilerCore VERSION 0.8.2)
+project(ShaderTranspilerCore VERSION 0.8.3)
 set(STC_VERSION_SUFFIX "")
 set(STC_SOVERSION PROJECT_VERSION_MAJOR) # ! ABI version is linked to semver's major version
 
-set(STC_VERSION "${PROJECT_VERSION}-${STC_VERSION_SUFFIX}")
+if(STC_VERSION_SUFFIX)
+    set(STC_VERSION "${PROJECT_VERSION}-${STC_VERSION_SUFFIX}")
+else()
+    set(STC_VERSION "${PROJECT_VERSION}")
+endif()
 
 if (NOT DEFINED STC_GIT_HASH)
     find_package(Git QUIET)
