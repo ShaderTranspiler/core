@@ -107,7 +107,7 @@ NodeId JLSema::try_unwrap_cmpd(NodeId cmpd_id) {
 
     assert(cmpd->body.size() == 1);
 
-    return cmpd->body[0];
+    return try_unwrap_cmpd(cmpd->body[0]);
 }
 
 TypeId JLSema::visit_default_case() {
@@ -241,7 +241,7 @@ void JLSema::pop_scope(bool is_global, bool skip_mangle) {
         return;
     }
 
-    // uses index lookup for dmq, because visit_method_body could force dmq to grow, potentially
+    // uses index lookup for dmq, because f could force dmq to grow, potentially
     // creating dangling references/invalidated iterators
 
     JLScope& scope = scopes.back();
@@ -852,18 +852,24 @@ bool JLSema::is_method_sig_redecl(const MethodDecl& method_decl, const FunctionD
 
 // CLEANUP: break up this function into 3 parts (global, local, common)
 TypeId JLSema::visit_MethodDecl(MethodDecl& method) {
-    if (!ctx.isa<CompoundExpr>(method.body))
+    auto* main_body_cmpd = ctx.get_and_dyn_cast<CompoundExpr>(method.body);
+
+    if (main_body_cmpd == nullptr)
         return fail("method declaration with non-compound expression as a body is not allowed",
                     method);
+
+    // unwrap nested cmpds
+    while (main_body_cmpd->body.size() == 1 && ctx.isa<CompoundExpr>(main_body_cmpd->body[0]))
+        main_body_cmpd = ctx.get_and_dyn_cast<CompoundExpr>(main_body_cmpd->body[0]);
+
+    assert(main_body_cmpd != nullptr);
+    method.body = ctx.calculate_node_id(*main_body_cmpd);
 
     if (method.identifier == sym_main) {
         if (!method.ret_type.is_null() && method.ret_type != ctx.jl_Nothing_t())
             return fail("main function with return type other than Nothing is not allowed", method);
 
         method.ret_type = ctx.jl_Nothing_t();
-
-        auto* main_body_cmpd = ctx.get_and_dyn_cast<CompoundExpr>(method.body);
-        assert(main_body_cmpd != nullptr);
 
         if (main_body_cmpd->body.empty() || !ctx.isa<ReturnStmt>(main_body_cmpd->body.back())) {
             SrcLocationId impl_ret_loc = !main_body_cmpd->body.empty()
