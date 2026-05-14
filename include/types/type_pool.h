@@ -113,10 +113,14 @@ public:
                           const SymbolPool& sym_pool);
 
     [[nodiscard]] TypeId el_type_of(const TypeDescriptor& td) const;
-
     [[nodiscard]] TypeId el_type_of(TypeId id, bool return_self_on_not_found = false) const {
         TypeId result = el_type_of(get_td(id));
         return !result.is_null() || !return_self_on_not_found ? result : id;
+    }
+
+    [[nodiscard]] TypeId with_el_type(const TypeDescriptor& coll_td, TypeId el_type);
+    [[nodiscard]] TypeId with_el_type(TypeId coll_type, TypeId el_type) {
+        return with_el_type(get_td(coll_type), el_type);
     }
 
     void register_builtin_str(BuiltinKind kind, std::string str);

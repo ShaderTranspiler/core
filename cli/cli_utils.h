@@ -81,7 +81,6 @@ inline void print_help() {
     std::cout << "  " << stc::colored("--err-dump none",    flag_col)   << "      disable AST dumping on errors (default)\n";
     std::cout << "  " << stc::colored("--err-dump partial", flag_col)   << "   dump the AST subtree that caused the given error\n";
     std::cout << "  " << stc::colored("--err-dump verbose", flag_col)   << "   dump the full AST at every error reported\n";
-    std::cout << "  " << stc::colored("-Wfwd-fns",          flag_col)   << "            warn when a function call is forwarded (see --fwd-fns)\n";
     std::cout << "  " << stc::colored("-Wjl-query",         flag_col)   << "           warn when the Julia runtime was queried for function call resolution\n";
     // clang-format on
 }

@@ -9,6 +9,40 @@ namespace stc {
 
 using namespace stc::types;
 
+enum class TargetOpKind : uint8_t {
+    FirstUnop = 0,
+    UnopPlus  = FirstUnop,
+    UnopNeg,
+    UnopPreInc,
+    UnopPostInc,
+    UnopPreDec,
+    UnopPostDec,
+    UnopLogNot,
+    UnopBitNeg,
+    LastUnop = UnopBitNeg,
+    FirstBinop,
+    BinopAdd = FirstBinop,
+    BinopSub,
+    BinopMul,
+    BinopDiv,
+    BinopMod,
+    BinopGt,
+    BinopGeq,
+    BinopLt,
+    BinopLeq,
+    BinopEq,
+    BinopNeq,
+    BinopLogAnd,
+    BinopLogOr,
+    BinopLogXor,
+    BinopBitAnd,
+    BinopBitOr,
+    BinopBitXor,
+    BinopLShift,
+    BinopRShift,
+    LastBinop = BinopRShift,
+};
+
 // serves as an "oracle" for backend capabilities in early passes, to keep things as
 // backend-agnostic as possible
 class TargetInfo {
@@ -78,6 +112,10 @@ public:
 
     bool has_builtin_global(std::string_view global_name) const;
     TypeId builtin_global_ty(std::string_view global_name) const;
+
+    // returns null id if the given op + sig pair is not valid
+    // whether it applies implicit casting is up to target rules
+    virtual TypeId builtin_op_ret_ty(TargetOpKind op, const TypeList& arg_types) const = 0;
 
     virtual bool valid_ctor_call(TypeId target, const TypeList& arg_types) const = 0;
 

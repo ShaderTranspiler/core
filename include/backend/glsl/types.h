@@ -61,17 +61,70 @@ public:
     STC_GL_DECL_MATS()
     STC_GL_DECL_MATS(d)
 
-    [[nodiscard]] TypeId gl_TvecN(TypeId T, uint32_t N) { return type_pool.vector_td(T, N); }
-    [[nodiscard]] TypeId gl_vecN(uint32_t n) { return gl_TvecN(gl_float, n); }
-    [[nodiscard]] TypeId gl_dvecN(uint32_t n) { return gl_TvecN(gl_double, n); }
-
-    [[nodiscard]] TypeId gl_TmatNxM(TypeId T, uint32_t N, uint32_t M) {
-        return type_pool.matrix_td(gl_TvecN(T, M), N);
+    [[nodiscard]] TypeId gl_TvecN(TypeId T, uint32_t N) const {
+#define STC_HANDLE_VECS(type, prefix)                                                              \
+    if (T == (type)) {                                                                             \
+        if (N == 2)                                                                                \
+            return gl_##prefix##vec2;                                                              \
+        if (N == 3)                                                                                \
+            return gl_##prefix##vec3;                                                              \
+        if (N == 4)                                                                                \
+            return gl_##prefix##vec4;                                                              \
+        throw std::logic_error{"unsupported GL vector component count"};                           \
     }
-    [[nodiscard]] TypeId gl_matNxM(uint32_t n, uint32_t m) { return gl_TmatNxM(gl_float, n, m); }
-    [[nodiscard]] TypeId gl_dmatNxM(uint32_t n, uint32_t m) { return gl_TmatNxM(gl_double, n, m); }
+
+        STC_HANDLE_VECS(gl_float, );
+        STC_HANDLE_VECS(gl_double, d);
+        STC_HANDLE_VECS(gl_int, i);
+        STC_HANDLE_VECS(gl_uint, u);
+        STC_HANDLE_VECS(gl_bool, b);
+
+        throw std::logic_error{"unsupported GL vector component type"};
+
+#undef STC_HANDLE_VECS
+    }
+
+    [[nodiscard]] TypeId gl_vecN(uint32_t N) const { return gl_TvecN(gl_float, N); }
+    [[nodiscard]] TypeId gl_dvecN(uint32_t N) const { return gl_TvecN(gl_double, N); }
+
+    [[nodiscard]] TypeId gl_TmatNxM(TypeId T, uint32_t N, uint32_t M) const {
+#define STC_HANDLE_MAT_N(col_count, prefix)                                                        \
+    if (N == (col_count)) {                                                                        \
+        if (M == 2)                                                                                \
+            return gl_##prefix##mat##col_count##x2;                                                \
+        if (M == 3)                                                                                \
+            return gl_##prefix##mat##col_count##x3;                                                \
+        if (M == 4)                                                                                \
+            return gl_##prefix##mat##col_count##x4;                                                \
+        throw std::logic_error{"unsupported GL matrix row count"};                                 \
+    }
+
+#define STC_HANDLE_MATS(type, prefix)                                                              \
+    if (T == (type)) {                                                                             \
+        STC_HANDLE_MAT_N(2, prefix);                                                               \
+        STC_HANDLE_MAT_N(3, prefix);                                                               \
+        STC_HANDLE_MAT_N(4, prefix);                                                               \
+        throw std::logic_error{"unsupported GL matrix column count"};                              \
+    }
+
+        STC_HANDLE_MATS(gl_float, );
+        STC_HANDLE_MATS(gl_double, d);
+
+        throw std::logic_error{"unsupported GL matrix element type"};
+
+#undef STC_HANDLE_MATS
+#undef STC_HANDLE_MAT_N
+    }
+
+    [[nodiscard]] TypeId gl_matNxM(uint32_t n, uint32_t m) const {
+        return gl_TmatNxM(gl_float, n, m);
+    }
+    [[nodiscard]] TypeId gl_dmatNxM(uint32_t n, uint32_t m) const {
+        return gl_TmatNxM(gl_double, n, m);
+    }
 
     [[nodiscard]] TypeId gl_array(TypeId el_type, uint32_t length) {
+        assert(is_gl_type(el_type));
         return type_pool.array_td(el_type, length);
     }
 
@@ -79,12 +132,7 @@ public:
         return T == gl_float || T == gl_double || T == gl_bool || T == gl_int || T == gl_uint;
     }
 
-    [[nodiscard]] bool is_gl_vec_type(TypeId T) const {
-        if (T.is_null())
-            return false;
-
-        const auto& td = type_pool.get_td(T);
-
+    [[nodiscard]] bool is_gl_vec_type(const TypeDescriptor& td) const {
         if (!td.is_vector())
             return false;
 
@@ -95,12 +143,14 @@ public:
                is_gl_scalar_type(el_type);
     }
 
-    [[nodiscard]] bool is_gl_mat_type(TypeId T) const {
+    [[nodiscard]] bool is_gl_vec_type(TypeId T) const {
         if (T.is_null())
             return false;
 
-        const auto& td = type_pool.get_td(T);
+        return is_gl_vec_type(type_pool.get_td(T));
+    }
 
+    [[nodiscard]] bool is_gl_mat_type(const TypeDescriptor& td) const {
         if (!td.is_matrix())
             return false;
 
@@ -108,6 +158,13 @@ public:
         TypeId col_type = mat_td.column_type_id;
 
         return 2 <= mat_td.column_count && mat_td.column_count <= 4 && is_gl_vec_type(col_type);
+    }
+
+    [[nodiscard]] bool is_gl_mat_type(TypeId T) const {
+        if (T.is_null())
+            return false;
+
+        return is_gl_mat_type(type_pool.get_td(T));
     }
 
     [[nodiscard]] bool is_gl_type(TypeId T) const {

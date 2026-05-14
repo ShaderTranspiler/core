@@ -10,6 +10,10 @@ namespace stc::glsl {
 using namespace stc::sir;
 
 class GLSLCodeGenVisitor final : public SIRVisitor<GLSLCodeGenVisitor, GLSLCtx, void> {
+public:
+    static constexpr const char* PASS_NAME = "GLSL Codegen";
+
+private:
     using Base = SIRVisitor<GLSLCodeGenVisitor, GLSLCtx, void>;
 
     std::stringstream out{};

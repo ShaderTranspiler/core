@@ -7,17 +7,34 @@
 
 namespace stc::types {
 
+MatrixTD::MatrixInfo MatrixTD::get_info(const TypePool& type_pool) const {
+    assert(type_pool.is_type_of<VectorTD>(column_type_id) && "non-vector column type in matrix");
+    VectorTD vec_td = type_pool.get_td(column_type_id).as<VectorTD>();
+
+    return {.rows           = vec_td.component_count,
+            .cols           = column_count,
+            .component_type = vec_td.component_type_id};
+}
+
 MatrixTD::MatrixInfo MatrixTD::get_info(TypeId mat_id, const TypePool& type_pool) {
     assert(type_pool.is_type_of<MatrixTD>(mat_id) && "mat_id points to non-matrix type");
     MatrixTD mat_td = type_pool.get_td(mat_id).as<MatrixTD>();
 
-    assert(type_pool.is_type_of<VectorTD>(mat_td.column_type_id) &&
-           "non-vector column type in matrix");
-    VectorTD vec_td = type_pool.get_td(mat_td.column_type_id).as<VectorTD>();
+    return mat_td.get_info(type_pool);
+}
 
-    return {.rows           = vec_td.component_count,
-            .cols           = mat_td.column_count,
-            .component_type = vec_td.component_type_id};
+TypeId MatrixTD::get_el_type(const TypePool& type_pool) const {
+    assert(type_pool.is_type_of<VectorTD>(column_type_id) && "non-vector column type in matrix");
+    VectorTD vec_td = type_pool.get_td(column_type_id).as<VectorTD>();
+
+    return vec_td.component_type_id;
+}
+
+TypeId MatrixTD::get_el_type(TypeId mat_id, const TypePool& type_pool) {
+    assert(type_pool.is_type_of<MatrixTD>(mat_id) && "mat_id points to non-matrix type");
+    MatrixTD mat_td = type_pool.get_td(mat_id).as<MatrixTD>();
+
+    return mat_td.get_el_type(type_pool);
 }
 
 std::vector<uint32_t> ArrayTD::get_dims(TypeId arr_id, const TypePool& type_pool) {

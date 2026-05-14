@@ -34,7 +34,12 @@ public:
     CtxTy& ctx;
 
     explicit ASTVisitor(CtxTy& ast_context)
-        : ctx{ast_context} {}
+        : ctx{ast_context} {
+        static_assert(
+            requires {
+                { ImplTy::PASS_NAME } -> std::convertible_to<const char*>;
+            }, "AST visitor pass without PASS_NAME descriptor");
+    }
 
     ImplTy* impl_this() { return static_cast<ImplTy*>(this); }
     const ImplTy* impl_this() const { return static_cast<const ImplTy*>(this); }

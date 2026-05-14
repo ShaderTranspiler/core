@@ -14,12 +14,12 @@ struct CtorTracker {
 };
 
 struct DtorTracker {
-    bool* was_destroyed;
-    DtorTracker(bool* flag)
+    bool& was_destroyed;
+    DtorTracker(bool& flag)
         : was_destroyed(flag) {
-        *was_destroyed = false;
+        was_destroyed = false;
     }
-    ~DtorTracker() { *was_destroyed = true; }
+    ~DtorTracker() { was_destroyed = true; }
 };
 
 TEST_CASE("init and basic alloc", "[BumpArena]") {
@@ -82,7 +82,7 @@ TEST_CASE("emplace and dtors", "[BumpArena]") {
 
         auto [off3, ptr3] = arena.emplace<CtorTracker>();
         REQUIRE(ptr3 != nullptr);
-        REQUIRE(ptr3->ctor_invoked_with_args);
+        REQUIRE_FALSE(ptr3->ctor_invoked_with_args);
     }
 
     SECTION("dtor calling") {
@@ -91,8 +91,8 @@ TEST_CASE("emplace and dtors", "[BumpArena]") {
 
         {
             BumpArena32 scoped_arena{1024};
-            std::ignore = scoped_arena.emplace<DtorTracker>(&flag1);
-            std::ignore = scoped_arena.emplace<DtorTracker>(&flag2);
+            std::ignore = scoped_arena.emplace<DtorTracker>(flag1);
+            std::ignore = scoped_arena.emplace<DtorTracker>(flag2);
 
             REQUIRE_FALSE(flag1);
             REQUIRE_FALSE(flag2);
@@ -104,7 +104,7 @@ TEST_CASE("emplace and dtors", "[BumpArena]") {
 
     SECTION("reset") {
         bool flag   = false;
-        std::ignore = arena.emplace<DtorTracker>(&flag);
+        std::ignore = arena.emplace<DtorTracker>(flag);
 
         arena.reset(); // reset should call dtors
 

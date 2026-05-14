@@ -1,6 +1,7 @@
 #include "frontend/jl/parser.h"
 #include "frontend/jl/type_conversion.h"
 #include "frontend/jl/utils.h"
+#include "tracy_guard.h"
 #include <algorithm>
 #include <bit>
 #include <utility>
@@ -44,6 +45,8 @@ stc::SymbolId get_tmp_sym(stc::SymbolPool& sym_pool) {
 namespace stc::jl {
 
 TypeId JLParser::resolve_type(jl_value_t* type) {
+    ZoneScoped;
+
     if (jl_is_symbol(type)) {
         auto* tsym = reinterpret_cast<jl_sym_t*>(type);
 
@@ -370,6 +373,9 @@ NodeId JLParser::parse(jl_value_t* node) {
 
 // parses the code argument using Julia's Meta.parse and invokes the regular parsing pipeline on it
 NodeId JLParser::parse_code(std::string_view code) {
+    ZoneScoped;
+    ZoneText(code.data(), code.size());
+
     jl_value_t* code_jl_str = nullptr;
     jl_value_t* parsed_expr = nullptr;
     JL_GC_PUSH2(&code_jl_str, &parsed_expr); // NOLINT
@@ -487,6 +493,8 @@ jl_value_t* JLParser::unwrap_layout_qual(jl_expr_t* lq_expr, std::vector<QualKin
 }
 
 NodeId JLParser::parse_qualified_decl(jl_value_t* qualified_expr, ParseCallback next_parser) {
+    ZoneScoped;
+
     std::vector<QualKind> quals{};
     LQPayload lq_payloads{};
 
@@ -586,8 +594,15 @@ NodeId JLParser::parse_qualified_decl(jl_value_t* qualified_expr, ParseCallback 
 }
 
 NodeId JLParser::parse_expr(jl_expr_t* expr) {
+    ZoneScoped;
+
     jl_sym_t* head = expr->head;
     size_t nargs   = jl_expr_nargs(expr);
+
+#ifdef STC_PROFILING
+    const char* head_str_prof = jl_symbol_name(head);
+    ZoneText(head_str_prof, strlen(head_str_prof));
+#endif
 
     if (head == sym_cache.block)
         return parse_block(expr, nargs);
@@ -656,6 +671,7 @@ NodeId JLParser::parse_expr(jl_expr_t* expr) {
 }
 
 NodeId JLParser::parse_var_decl(jl_expr_t* expr, size_t nargs) {
+    ZoneScoped;
     assert(expr->head == sym_cache.global || expr->head == sym_cache.local ||
            expr->head == sym_cache.eq || expr->head == sym_cache.dbl_col);
 
@@ -709,6 +725,7 @@ NodeId JLParser::parse_var_decl(jl_expr_t* expr, size_t nargs) {
 }
 
 NodeId JLParser::parse_method_decl(jl_expr_t* expr, size_t nargs) {
+    ZoneScoped;
     assert(expr->head == sym_cache.function || expr->head == sym_cache.eq);
 
     if (nargs != 2)
@@ -794,6 +811,7 @@ NodeId JLParser::parse_method_decl(jl_expr_t* expr, size_t nargs) {
 }
 
 NodeId JLParser::parse_param_decl(jl_value_t* param) {
+    ZoneScoped;
     if (param == nullptr)
         return internal_error("null pointer in Julia AST");
 
@@ -884,6 +902,7 @@ NodeId JLParser::parse_assignment(jl_expr_t* expr, size_t nargs) {
 }
 
 NodeId JLParser::parse_tuple_assignment(jl_expr_t* expr) {
+    ZoneScoped;
     // these should all be prevalidated by the caller
     assert(expr->head == sym_cache.eq);
     assert(jl_expr_nargs(expr) == 2);
@@ -959,6 +978,7 @@ NodeId JLParser::parse_update_assignment(jl_expr_t* expr, size_t nargs) {
 }
 
 NodeId JLParser::parse_block(jl_expr_t* expr, size_t nargs) {
+    ZoneScoped;
     assert(expr->head == sym_cache.block);
 
     SrcLocationId cmpd_loc = cur_loc;
@@ -984,6 +1004,7 @@ NodeId JLParser::parse_block(jl_expr_t* expr, size_t nargs) {
 }
 
 NodeId JLParser::parse_call(jl_expr_t* expr, size_t nargs) {
+    ZoneScoped;
     assert(expr->head == sym_cache.call || expr->head == sym_cache.dot);
 
     SrcLocationId call_loc = cur_loc;
@@ -1001,11 +1022,13 @@ NodeId JLParser::parse_call(jl_expr_t* expr, size_t nargs) {
     // catches regular broadcast calls immediately
     bool is_broadcast       = expr->head == sym_cache.dot;
     NodeId parsed_target_fn = NodeId::null_id();
+    bool unfold_binop       = false;
 
     jl_value_t* target_fn_v = jl_exprarg(expr, 0);
     if (!is_broadcast && jl_is_symbol(target_fn_v)) {
         assert(expr->head == sym_cache.call);
-        std::string_view fn_name{jl_symbol_name(safe_cast<jl_sym_t>(target_fn_v))};
+        jl_sym_t* fn_sym = safe_cast<jl_sym_t>(target_fn_v);
+        std::string_view fn_name{jl_symbol_name(fn_sym)};
 
         // prefix broadcast calls, strip first symbol
         if (fn_name.starts_with('.')) {
@@ -1013,8 +1036,10 @@ NodeId JLParser::parse_call(jl_expr_t* expr, size_t nargs) {
 
             is_broadcast     = true;
             parsed_target_fn = emplace_decl_ref(cur_loc, target_fn);
+            unfold_binop     = fn_sym == sym_cache.dot_plus || fn_sym == sym_cache.dot_asterisk;
         } else {
             parsed_target_fn = parse(target_fn_v);
+            unfold_binop     = fn_sym == sym_cache.plus || fn_sym == sym_cache.asterisk;
         }
     } else {
         parsed_target_fn = parse(target_fn_v);
@@ -1045,6 +1070,24 @@ NodeId JLParser::parse_call(jl_expr_t* expr, size_t nargs) {
 
         NodeId parsed_arg = parse(arg);
         params.push_back(parsed_arg);
+    }
+
+    // flatten "n-ary parsed" binary operators
+    // +(1, 2, 3, 4) -> +(+(+(1, 2), 3), 4)
+    // NOTE:
+    // this currently only affects + and *, so left-associativity is assumed here.
+    // if this is extended in a later Julia version, this will need to be updated as well
+    if (unfold_binop && params.size() > 2) {
+        NodeId current_lhs = emplace_node<FunctionCall>(
+            call_loc, parsed_target_fn, std::vector{params[0], params[1]}, is_broadcast);
+
+        for (size_t rhs_idx = 2; rhs_idx < params.size(); rhs_idx++) {
+            current_lhs =
+                emplace_node<FunctionCall>(call_loc, parsed_target_fn,
+                                           std::vector{current_lhs, params[rhs_idx]}, is_broadcast);
+        }
+
+        return current_lhs;
     }
 
     return emplace_node<FunctionCall>(call_loc, parsed_target_fn, std::move(params), is_broadcast);
@@ -1111,6 +1154,7 @@ NodeId JLParser::parse_return(jl_expr_t* expr, size_t nargs) {
 }
 
 NodeId JLParser::parse_dot_chain(jl_expr_t* expr, size_t nargs) {
+    ZoneScoped;
     assert(expr->head == sym_cache.dot);
 
     if (nargs != 2)
@@ -1224,6 +1268,7 @@ NodeId JLParser::parse_field_decl(jl_value_t* field_decl_v) {
 }
 
 NodeId JLParser::parse_struct(jl_expr_t* expr, size_t nargs, bool register_td) {
+    ZoneScoped;
     assert(expr->head == sym_cache.struct_);
 
     if (nargs != 3)
@@ -1323,6 +1368,7 @@ NodeId JLParser::parse_struct(jl_expr_t* expr, size_t nargs, bool register_td) {
 }
 
 NodeId JLParser::parse_interface_block(jl_expr_t* expr, QualKind storage) {
+    ZoneScoped;
     assert(expr->head == sym_cache.struct_);
 
     InterfaceStorage st{};

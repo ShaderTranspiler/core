@@ -2,6 +2,8 @@
 
 #include "julia_guard.h"
 
+#include "frontend/jl/ctor_resolver.h"
+#include "frontend/jl/op_resolver.h"
 #include "frontend/jl/scope.h"
 #include "frontend/jl/sym_res.h"
 #include "frontend/jl/type_conversion.h"
@@ -13,10 +15,16 @@
 namespace stc::jl {
 
 class JLSema : public JLVisitor<JLSema, JLCtx, TypeId> {
+public:
+    static constexpr const char* PASS_NAME = "Julia Sema";
+
+private:
     TypePool& tpool;
     std::deque<JLScope> scopes;
     std::vector<NodeId> captured_uniforms{};
     TypeToJLVisitor type_to_jl;
+    OpResolver op_resolver;
+    CtorResolver ctor_resolver;
 
     NodeId main_fn_decl        = NodeId::null_id();
     SymbolId sym_main          = SymbolId::null_id();
@@ -35,6 +43,8 @@ public:
           tpool{ctx.type_pool},
           scopes{},
           type_to_jl{ctx},
+          op_resolver{ctx.sym_pool},
+          ctor_resolver{ctx.sym_pool},
           sym_main{ctx.sym_pool.get_id("main")},
           in_interactive_ctx{in_interactive_ctx} {
 
@@ -116,8 +126,14 @@ private:
 
     bool is_method_sig_redecl(const MethodDecl& method_decl, const FunctionDecl& fn_decl);
 
-    TypeId ret_type_of_jl_call(jl_value_t* fn, const std::vector<TypeId>& arg_types,
-                               bool is_broadcast, const Expr& base_expr);
+    using MaybeArgListRef = std::optional<std::reference_wrapper<std::vector<NodeId>>>;
+
+    // the presence of args controls whether arg rewriting is allowed
+    // e.g. casting args to floats to properly mimic Julia's float division on ints
+    // if args is not provided, arg_types will NOT be modified (it basically can be treated like a
+    // const reference semantically)
+    TypeId ret_type_of_jl_call(jl_value_t* fn, SymbolId fn_name, std::vector<TypeId>& arg_types,
+                               bool is_broadcast, MaybeArgListRef args, const Expr& base_expr);
 
     std::optional<MethodDecl*> find_sig_match(const FunctionDecl& fn_decl,
                                               const std::vector<TypeId>& arg_types,

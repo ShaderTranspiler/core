@@ -24,6 +24,7 @@ public:
     GLSLTargetInfo(GLSLTargetInfo&&)                 = delete;
     GLSLTargetInfo& operator=(GLSLTargetInfo&&)      = delete;
 
+    TypeId builtin_op_ret_ty(TargetOpKind op, const TypeList& arg_types) const override;
     bool valid_ctor_call(TypeId target, const TypeList& arg_types) const override;
     bool can_implicit_cast(TypeId src_ty, TypeId dest_ty) const override;
 
@@ -34,6 +35,9 @@ private:
 
     static GlobalList create_globals(GLSLTypes& types);
     static FnList create_fns(GLSLTypes& types);
+
+    TypeId resolve_unop(TargetOpKind op, const TypeList& arg_types) const;
+    TypeId resolve_binop(TargetOpKind op, const TypeList& arg_types) const;
 };
 
 } // namespace stc::glsl

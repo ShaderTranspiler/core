@@ -23,3 +23,11 @@
 #else
     #define STC_FORCE_INLINE inline
 #endif
+
+#if defined(_MSC_VER)
+    #define STC_PRETTY_FUNC __FUNCSIG__
+#elif defined(__GNUC__) || defined(__clang__)
+    #define STC_PRETTY_FUNC __PRETTY_FUNCTION__
+#else
+    #define STC_PRETTY_FUNC ""
+#endif

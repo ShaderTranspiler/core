@@ -238,6 +238,25 @@ TypeId TypePool::el_type_of(const TypeDescriptor& td) const {
     return TypeId::null_id();
 }
 
+TypeId TypePool::with_el_type(const TypeDescriptor& coll_td, TypeId el_type) {
+    assert(get_td(el_type).is_scalar() && "non-scalar element type");
+
+    if (coll_td.is_vector())
+        return vector_td(el_type, coll_td.as<VectorTD>().component_count);
+
+    if (coll_td.is_matrix()) {
+        assert(get_td(coll_td.as<MatrixTD>().column_type_id).is_vector() &&
+               "non-vector column type in matrix type");
+
+        MatrixTD mat_ty = coll_td.as<MatrixTD>();
+        VectorTD col_ty = get_td(mat_ty.column_type_id).as<VectorTD>();
+
+        return matrix_td(vector_td(el_type, col_ty.component_count), mat_ty.column_count);
+    }
+
+    throw std::logic_error{"with_el_type only supports vectors and matrices"};
+}
+
 void TypePool::register_builtin_str(BuiltinKind kind, std::string str) {
     bool inserted = builtin_str_map.try_emplace(kind, str).second;
 

@@ -3,6 +3,7 @@
 #include "ast/visitor.h"
 #include "frontend/jl/ast.h"
 #include "frontend/jl/context.h"
+#include "tracy_guard.h"
 #include <type_traits>
 
 namespace stc::jl {
@@ -22,14 +23,31 @@ class JLVisitor : public ASTVisitor<ImplTy, CtxTy, RetTy> {
 protected:
     using ASTVisitor<ImplTy, CtxTy, RetTy>::ASTVisitor;
 
+// CLEANUP: prettier function name printing
+#ifdef STC_PROFILING
+    template <typename Pass, typename Node, typename Func>
+    static inline RetTy ProfiledVisit(Func&& func) {
+        ZoneScopedN(STC_PRETTY_FUNC);
+        return func();
+    }
+#endif
+
 public:
     RetTy dispatch(Expr* node) {
         // clang-format off
         switch (node->kind()) {
 
-        #define X(type, kind)                                                                  \
-            case (NodeKind::kind):                                                             \
+#ifndef STC_PROFILING
+        #define X(type, kind)                                                                     \
+            case (NodeKind::kind):                                                                \
                 return this->impl_this()->visit_##type(*static_cast<type*>(node));
+#else
+        #define X(type, kind)                                                                     \
+            case (NodeKind::kind):                                                                \
+                return ProfiledVisit<ImplTy, type>([&]() {                                        \
+                    return this->impl_this()->visit_##type(*static_cast<type*>(node));            \
+                });
+#endif
 
             #include "frontend/jl/node_defs/all_nodes.def"
         #undef X
@@ -39,6 +57,6 @@ public:
         }
         // clang-format on
     }
-};
+}; // namespace stc::jl
 
 } // namespace stc::jl

@@ -85,6 +85,8 @@ TEST_CASE("node emplace and retrieval", "[ASTCtx]") {
 
 class TestVisitor : public ASTVisitor<TestVisitor, DummyCtx, int> {
 public:
+    static constexpr const char* PASS_NAME = "Test Dummy Visitor";
+
     int visit_count          = 0;
     bool skip_next_pre_visit = false;
 

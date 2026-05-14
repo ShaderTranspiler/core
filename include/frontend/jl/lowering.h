@@ -18,6 +18,10 @@ namespace stc::jl {
 //    SIR context without problem
 
 class JLLoweringVisitor final : public JLVisitor<JLLoweringVisitor, JLCtx, sir::NodeId> {
+public:
+    static constexpr const char* PASS_NAME = "Julia Lowering";
+
+private:
     using SIRNodeId = sir::NodeId;
 
     std::unordered_map<Decl*, SIRNodeId> decl_map{};

@@ -8,6 +8,8 @@ namespace stc::sir {
 
 class SIRDumper final : public SIRVisitor<SIRDumper, SIRCtx, void> {
 public:
+    static constexpr const char* PASS_NAME = "SIR Dumper";
+
     explicit SIRDumper(SIRCtx& ctx, std::ostream& out)
         : SIRVisitor{ctx}, out{out} {}
 

@@ -52,10 +52,6 @@ extern "C" {
         STC_SET_CFG_VALUE(cfg_handle, forward_fns, value);
     }
 
-    STC_API void stc_set_warn_on_fn_forward(void* cfg_handle, bool value) noexcept {
-        STC_SET_CFG_VALUE(cfg_handle, warn_on_fn_forward, value);
-    }
-
     STC_API void stc_set_warn_on_jl_sema_query(void* cfg_handle, bool value) noexcept {
         STC_SET_CFG_VALUE(cfg_handle, warn_on_jl_sema_query, value);
     }

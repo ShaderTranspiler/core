@@ -94,8 +94,6 @@ int run(int argc, char* argv[]) {
             config.coerce_to_f32 = false;
         } else if (arg == "--no-uniform-capture")
             config.capture_uniforms = false;
-        else if (arg == "-Wfwd-fns")
-            config.warn_on_fn_forward = true;
         else if (arg == "-Wjl-query")
             config.warn_on_jl_sema_query = true;
         else if (arg == "--err-dump") {
@@ -205,14 +203,14 @@ int run(int argc, char* argv[]) {
     jl_eval_string(str);                                                                           \
     STC_CHECK_EXCEPTIONS
 
-    std::cout << "initializing Julia environment for transpilation...\n";
+    std::cout << "Initializing Julia environment for transpilation...\n";
 
     jl_init();
     STC_CHECK_EXCEPTIONS
 
     STC_EVAL_AND_CHECK("using JuliaGLM");
 
-    std::cout << "starting transpilation...\n";
+    std::cout << "Starting transpilation...\n";
 
     const ScopeGuard jl_guard{[&]() { jl_atexit_hook(0); }};
 
@@ -259,6 +257,12 @@ int run(int argc, char* argv[]) {
             }
         }
     }
+
+#ifdef STC_PROFILING
+    std::cout
+        << "Profiling enabled, waiting for key press so that Tracy can flush data properly...\n";
+    std::cin.get();
+#endif
 
     return 0;
 

@@ -9,6 +9,10 @@
 namespace stc::jl {
 
 class SymbolRes : public JLVisitor<SymbolRes, JLCtx, void> {
+public:
+    static constexpr const char* PASS_NAME = "Julia Symbol Resolution";
+
+private:
     enum class ScopeInferSrc : uint8_t { Access = 0, Assign, Decl };
 
     using ScopeInferTableEntry = std::pair<std::reference_wrapper<Expr>, ScopeInferSrc>;

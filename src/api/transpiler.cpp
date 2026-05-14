@@ -8,6 +8,7 @@
 #include "frontend/jl/sema.h"
 #include "meta.h"
 #include "sir/dumper.h"
+#include "tracy_guard.h"
 
 namespace stc::api {
 

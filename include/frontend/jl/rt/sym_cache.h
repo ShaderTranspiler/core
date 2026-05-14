@@ -70,6 +70,12 @@ struct JuliaSymbolCache {
     jl_sym_t* gl_uniform = jl_symbol("@gl_uniform");
     jl_sym_t* gl_buffer  = jl_symbol("@gl_buffer");
 
+    // (potential) n-ary binary operators
+    jl_sym_t* plus         = jl_symbol("+");
+    jl_sym_t* dot_plus     = jl_symbol(".+");
+    jl_sym_t* asterisk     = jl_symbol("*");
+    jl_sym_t* dot_asterisk = jl_symbol(".*");
+
     // misc
     jl_sym_t* none = jl_symbol("none"); // for LineNumberNode-s without associated files
 };

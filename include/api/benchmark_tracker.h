@@ -9,12 +9,17 @@ namespace stc::api::detail {
 inline std::string format_bm_duration(std::chrono::nanoseconds dur) {
     using namespace std::chrono;
 
+    duration<double> exact_sec            = dur;
     duration<double, std::milli> exact_ms = dur;
     duration<double, std::micro> exact_us = dur;
 
-    return duration_cast<milliseconds>(dur).count() > 0
-               ? fmt::format("{:.3f} ms", exact_ms.count())
-               : fmt::format("{:.0f} us", exact_us.count());
+    if (duration_cast<seconds>(dur).count() > 0)
+        return fmt::format("{:.3f} sec", exact_sec.count());
+
+    if (duration_cast<milliseconds>(dur).count() > 0)
+        return fmt::format("{:.3f} ms", exact_ms.count());
+
+    return fmt::format("{:.0f} us", exact_us.count());
 }
 
 template <bool Enabled>

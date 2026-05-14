@@ -50,6 +50,7 @@ option(NO_SANDBOX "Disable sandbox targets" OFF)
 option(NO_SAN "Disable address and undefined sanitizers (ASan and UBSan). Might be required with some versions of Julia" OFF)
 option(NO_DOCS "Disable any docs-related targets." OFF)
 option(NO_CLI "Disable CLI target (saves a bit of time in some cases, where it's enough to build the lib)" OFF)
+option(ENABLE_PROFILING "Enables downloading and linking Tracy through FetchContent, and defines the STC_PROFILING macro)" OFF)
 
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "")
     message(STATUS "No build type specified, defaulting to Debug")
@@ -185,6 +186,22 @@ if(NOT fmt_FOUND)
     endif()
 else()
     message(STATUS "fmt found locally")
+endif()
+
+# Tracy
+if (ENABLE_PROFILING)
+    message(STATUS "ENABLE_PROFILING flag provided, Tracy will be fetched through git...")
+    
+    set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+    set(TRACY_LTO ON CACHE BOOL "" FORCE)
+    set(TRACY_NO_SYSTEM_TRACING ON CACHE BOOL "" FORCE)
+    
+    FetchContent_Declare(
+        tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG        v0.13.1
+    )
+    FetchContent_MakeAvailable(tracy)
 endif()
 
 # ccache
@@ -348,6 +365,11 @@ target_include_directories(${LIBSTC_OBJ_TARGET} SYSTEM PUBLIC ${JULIA_INCLUDE_DI
 target_link_libraries(${LIBSTC_OBJ_TARGET} PUBLIC CommonConfig ${JULIA_LIB} fmt::fmt)
 target_compile_definitions(${LIBSTC_OBJ_TARGET} PUBLIC STC_BUILDING_DLL=1 JULIA_ENABLE_THREADING=1)
 
+if (ENABLE_PROFILING)
+    target_link_libraries(${LIBSTC_OBJ_TARGET} PUBLIC Tracy::TracyClient)
+    target_compile_definitions(${LIBSTC_OBJ_TARGET} PUBLIC TRACY_ENABLE=1 STC_PROFILING=1)
+endif()
+
 # libstc
 
 file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS "include/*.h")
@@ -355,6 +377,10 @@ file(GLOB_RECURSE LIB_HEADERS CONFIGURE_DEPENDS "include/*.h")
 set(LIBSTC_TARGET stc)
 add_library(${LIBSTC_TARGET} SHARED $<TARGET_OBJECTS:${LIBSTC_OBJ_TARGET}>)
 target_link_libraries(${LIBSTC_TARGET} PRIVATE ${LIBSTC_OBJ_TARGET})
+
+if (ENABLE_PROFILING)
+    target_link_libraries(${LIBSTC_TARGET} PRIVATE Tracy::TracyClient)    
+endif()
 
 # target_compile_definitions(${LIBSTC_TARGET} PRIVATE STC_BUILDING_DLL=1 JULIA_ENABLE_THREADING=1)
 
@@ -416,6 +442,10 @@ if (NOT NO_CLI)
         set_target_properties(${CLI_TARGET} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_CMD}")
     endif()
 
+    if (ENABLE_PROFILING)
+        target_compile_definitions(${CLI_TARGET} PRIVATE STC_PROFILING=1)
+    endif()
+
     if (WIN32)
         add_custom_command(TARGET ${CLI_TARGET} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -462,12 +492,15 @@ if (BUILD_TESTING)
         RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL     ${TEST_OUTPUT_DIR}
     )
 
+    target_compile_definitions(unit_tests PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
+
     target_link_libraries(unit_tests PRIVATE ${LIBSTC_OBJ_TARGET})
     target_link_libraries(unit_tests PRIVATE Catch2::Catch2WithMain)
-    #target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/generated)
-    #target_include_directories(unit_tests SYSTEM PRIVATE ${JULIA_INCLUDE_DIR})
 
-    #target_compile_definitions(unit_tests PRIVATE STC_BUILDING_DLL=1)
+    if (ENABLE_PROFILING)
+        target_link_libraries(unit_tests PRIVATE Tracy::TracyClient)
+        target_compile_definitions(unit_tests PRIVATE STC_PROFILING=1)
+    endif()
 
     # copy lib for test runner
     if (WIN32)

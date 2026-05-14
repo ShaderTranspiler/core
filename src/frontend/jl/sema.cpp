@@ -1830,6 +1830,10 @@ NodeId JLSema::resolve_sym_with_binding(SymbolId sym, BindingType bt, const Expr
             return builtin_fn;
         }
 
+        // perform ctor alias to type rewriting (if applicable, e.g. dvec3 -> DVec3)
+        sym     = ctor_resolver.try_apply_rewrite(sym);
+        sym_str = ctx.get_sym(sym);
+
         // try to resolve in JuliaGLM before any other module
         jl_value_t* jl_fn = ctx.jl_env.module_cache.glm_mod.get_fn(sym_str, false);
 
@@ -1850,10 +1854,10 @@ NodeId JLSema::resolve_sym_with_binding(SymbolId sym, BindingType bt, const Expr
         auto opaq_fn = ctx.emplace_node<OpaqueFunction>(base_expr.location, fn_name, jl_fn).first;
         infer(opaq_fn);
 
-        if (!rt::is_type(jl_fn) && ctx.config.warn_on_jl_sema_query)
-            warn(fmt::format("had to resolve function reference through julia for non-type "
+        if (ctx.config.warn_on_jl_sema_query)
+            warn(fmt::format("had to resolve function reference through julia for {}type "
                              "referring symbol '{}'",
-                             sym_str),
+                             !rt::is_type(jl_fn) ? "non-" : "", sym_str),
                  base_expr);
 
         return opaq_fn;
@@ -2074,12 +2078,6 @@ TypeId JLSema::visit_Assignment(Assignment& assign) {
 }
 
 TypeId JLSema::visit_UpdateAssignment(UpdateAssignment& up_assign) {
-    if (!ctx.config.forward_fns) {
-        return fail("update assignment operators are currently not supported with function "
-                    "forwarding disabled.",
-                    up_assign);
-    }
-
     if (up_assign.value.is_null())
         return TypeId::null_id();
 
@@ -2101,8 +2099,8 @@ TypeId JLSema::visit_UpdateAssignment(UpdateAssignment& up_assign) {
 
     std::vector<TypeId> arg_types = {lhs_ty, value_ty};
 
-    TypeId rhs_ty =
-        ret_type_of_jl_call(opaq_fn->jl_function, arg_types, up_assign.is_broadcast(), up_assign);
+    TypeId rhs_ty = ret_type_of_jl_call(opaq_fn->jl_function, opaq_fn->fn_name(), arg_types,
+                                        up_assign.is_broadcast(), std::nullopt, up_assign);
 
     if (rhs_ty.is_null())
         return TypeId::null_id();
@@ -2121,24 +2119,116 @@ TypeId JLSema::visit_UpdateAssignment(UpdateAssignment& up_assign) {
             up_assign);
     }
 
-    if (ctx.config.warn_on_fn_forward) {
-        warn(fmt::format("update assignment forced sema to utilize function forwarding for "
-                         "function '{}'",
-                         ctx.get_sym(opaq_fn->fn_name())),
-             up_assign);
-    }
-
     return rhs_ty;
 }
 
-TypeId JLSema::ret_type_of_jl_call(jl_value_t* fn, const std::vector<TypeId>& arg_types,
-                                   bool is_broadcast, const Expr& base_expr) {
+TypeId JLSema::ret_type_of_jl_call(jl_value_t* fn, SymbolId fn_name, std::vector<TypeId>& arg_types,
+                                   bool is_broadcast, MaybeArgListRef args, const Expr& base_expr) {
     assert(fn != nullptr);
+    assert(!args.has_value() || args->get().size() == arg_types.size());
 
     // only actually alloc and init string if needed for an error msg
     LazyInit error_suffix{[&]() -> std::string {
         return fmt::format("(in call to function '{}')", get_jl_fn_name(fn));
     }};
+
+    // try to resolve as a builtin operator first
+    if (ctx.target_info != nullptr) {
+        TargetOpKind t_op = OpMapping::INVALID_OP;
+
+        // builtin unary/binary operators
+        if (!arg_types.empty() && arg_types.size() <= 2)
+            t_op = op_resolver.get_target_op(fn_name, arg_types.size() == 2);
+
+        TypeId ret_ty = TypeId::null_id();
+        bool is_op    = false;
+
+        // CLEANUP: generalize GLSL-specific logic for binops
+        if (t_op != OpMapping::INVALID_OP) {
+            bool failed_op_res = false;
+
+            if (arg_types.size() == 2 && arg_types[0] == ctx.type_pool.bool_td() &&
+                arg_types[1] == ctx.type_pool.bool_td()) {
+                // a op b where op in {&, |, xor} can be either bitwise or a non-short-circuiting
+                // logical op based on arg types
+
+                // TODO
+                // currently, this naively turns non-short-circuiting boolean logic in Julia into
+                // short-circuiting logic in GLSL
+
+                if (t_op == TargetOpKind::BinopBitAnd)
+                    t_op = TargetOpKind::BinopLogAnd;
+                if (t_op == TargetOpKind::BinopBitOr)
+                    t_op = TargetOpKind::BinopLogOr;
+                if (t_op == TargetOpKind::BinopBitXor)
+                    t_op = TargetOpKind::BinopLogXor;
+            }
+
+            std::string_view fn_name_str = ctx.get_sym(fn_name);
+
+            // 'int / int' produces float in Julia, we wanna preserve that semantic in GLSL
+            // and similarly for int collections
+            if (arg_types.size() == 2 && fn_name_str == "/") {
+                TypeId lhs_el_type = ctx.type_pool.el_type_of(arg_types[0]);
+                TypeId rhs_el_type = ctx.type_pool.el_type_of(arg_types[1]);
+
+                // handles all int/uint sizes
+                bool is_lhs_int = ctx.type_pool.is_type_of<IntTD>(lhs_el_type);
+                bool is_rhs_int = ctx.type_pool.is_type_of<IntTD>(rhs_el_type);
+
+                if (is_lhs_int && is_rhs_int) {
+                    if (args.has_value()) {
+                        auto& args_ref = args->get();
+
+                        // in case of failed arg resolution, should have already returned
+                        assert(ctx.get_node(args_ref[0]) != nullptr);
+                        assert(ctx.get_node(args_ref[1]) != nullptr);
+
+                        SrcLocationId arg0_loc = ctx.get_node(args_ref[0])->location;
+                        SrcLocationId arg1_loc = ctx.get_node(args_ref[1])->location;
+
+                        TypeId float_el_type =
+                            ctx.config.coerce_to_f32 ? ctx.jl_Float32_t() : ctx.jl_Float64_t();
+
+                        TypeId arg0_cast_ty =
+                            ctx.type_pool.with_el_type(arg_types[0], float_el_type);
+                        TypeId arg1_cast_ty =
+                            ctx.type_pool.with_el_type(arg_types[1], float_el_type);
+
+                        args_ref[0] =
+                            ctx.emplace_node<ExplicitCast>(arg0_loc, args_ref[0], arg0_cast_ty)
+                                .first;
+                        args_ref[1] =
+                            ctx.emplace_node<ExplicitCast>(arg1_loc, args_ref[1], arg1_cast_ty)
+                                .first;
+
+                        // this also ensures that the broadcasting part doesn't need extra logic to
+                        // handle int div correctly, since it uses arg_types as a starting point
+                        arg_types[0] = arg0_cast_ty;
+                        arg_types[1] = arg1_cast_ty;
+                    } else {
+                        failed_op_res = true;
+                    }
+                }
+            }
+
+            if (!failed_op_res) {
+                ret_ty = ctx.target_info->builtin_op_ret_ty(t_op, arg_types);
+                is_op  = ret_ty != TypeId::null_id();
+            }
+        }
+
+        if (is_op && !ret_ty.is_null())
+            return ret_ty;
+    }
+
+    if (!ctx.config.forward_fns) {
+        return fail(
+            fmt::format("couldn't resolve call to '{}'. To use Julia queried information "
+                        "and blindly pass it down the pipeline, enable function forwarding.",
+                        ctx.get_sym(fn_name)),
+            base_expr);
+    }
 
     if (ctx.config.warn_on_jl_sema_query)
         warn(fmt::format("had to resolve function call's return type through julia {}",
@@ -2364,7 +2454,8 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
     if (fn_call.target_fn.is_null())
         return TypeId::null_id();
 
-    bool is_valid_fn = check(fn_call.target_fn, tpool.any_func_td());
+    // allows pretyped because unfolded binop call chains reuse same parsed target
+    bool is_valid_fn = check(fn_call.target_fn, tpool.any_func_td(), true);
     if (!is_valid_fn) {
         if (_success)
             fail("call expression's target couldn't be checked to have function type", fn_call);
@@ -2481,7 +2572,7 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
             ctx.target_info->builtin_fn_ret_ty_with_impl_cast(fn_name_str, arg_types).first;
 
         // these have to be checked to avoid letting calls like cross.(vec3) through
-        if (fn_call.is_broadcast()) {
+        if (!ret_ty.is_null() && fn_call.is_broadcast()) {
             std::vector<TypeId> arg_el_types{};
             arg_el_types.reserve(arg_types.size());
 
@@ -2492,12 +2583,12 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
                 ctx.target_info->builtin_fn_ret_ty_with_impl_cast(fn_name_str, arg_el_types).first;
 
             if (!ret_ty.is_null() && el_ret_ty.is_null()) {
-                return fail(
-                    fmt::format(
-                        "broadcast call is invalid according to the target language, i.e. it has a "
-                        "collection-level overload, but not an element-level one (in call to '{}')",
-                        fn_name_str),
-                    fn_call);
+                return fail(fmt::format("broadcast call is invalid according to the target "
+                                        "language, i.e. it has a "
+                                        "collection-level overload, but not an "
+                                        "element-level one (in call to '{}')",
+                                        fn_name_str),
+                            fn_call);
             }
         }
 
@@ -2559,26 +2650,9 @@ TypeId JLSema::visit_FunctionCall(FunctionCall& fn_call) {
         }
     }
 
-    if (!ctx.config.forward_fns) {
-        return fail(
-            fmt::format("couldn't resolve call to '{}'. to use Julia queried information "
-                        "and blindly pass it down the pipeline, enable function forwarding.",
-                        ctx.get_sym(opaq_fn->fn_name())),
-            fn_call);
-    }
-
     // ret_type_of_jl_call should already print any error necessary
-    TypeId ret_type =
-        ret_type_of_jl_call(opaq_fn->jl_function, arg_types, fn_call.is_broadcast(), fn_call);
-
-    if (!ret_type.is_null() && ctx.config.warn_on_fn_forward) {
-        warn(fmt::format(
-                 "sema could only resolve return type of call to function '{}' through Julia. "
-                 "function forwarding is enabled, so the function call will appear with "
-                 "identical typing in the final code.",
-                 ctx.get_sym(opaq_fn->fn_name())),
-             fn_call);
-    }
+    TypeId ret_type = ret_type_of_jl_call(opaq_fn->jl_function, opaq_fn->fn_name(), arg_types,
+                                          fn_call.is_broadcast(), fn_call.args, fn_call);
 
     return ret_type;
 }

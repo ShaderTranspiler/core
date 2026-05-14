@@ -23,8 +23,7 @@ struct TranspilerConfig {
     DumpVerbosity err_dump_verbosity = DumpVerbosity::None;
     bool use_tabs                    = false;
     bool dump_scopes                 = false;
-    bool forward_fns                 = true;
-    bool warn_on_fn_forward          = false;
+    bool forward_fns                 = false;
     bool warn_on_jl_sema_query       = false;
     bool print_convert_fail_reason   = false;
     bool track_bindings              = false;

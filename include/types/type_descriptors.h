@@ -79,9 +79,11 @@ struct VectorTD {
 
 struct MatrixTD {
     struct MatrixInfo {
-        const uint32_t rows;
-        const uint32_t cols;
-        const TypeId component_type;
+        uint32_t rows;
+        uint32_t cols;
+        TypeId component_type;
+
+        constexpr bool operator==(const MatrixInfo&) const = default;
     };
 
     const TypeId column_type_id;
@@ -89,7 +91,11 @@ struct MatrixTD {
 
     constexpr bool operator==(const MatrixTD&) const = default;
 
+    MatrixInfo get_info(const TypePool& type_pool) const;
+    TypeId get_el_type(const TypePool& type_pool) const;
+
     static MatrixInfo get_info(TypeId mat_id, const TypePool& type_pool);
+    static TypeId get_el_type(TypeId mat_id, const TypePool& type_pool);
 };
 
 struct ArrayTD {

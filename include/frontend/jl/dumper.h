@@ -9,6 +9,8 @@ namespace stc::jl {
 
 class JLDumper final : public JLVisitor<JLDumper, const JLCtx, void> {
 public:
+    static constexpr const char* PASS_NAME = "Julia Dumper";
+
     explicit JLDumper(const JLCtx& ctx, std::ostream& out)
         : JLVisitor{ctx}, out{out} {}
 
